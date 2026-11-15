@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Session quick bar",
+    "description": "Owns the buttons on the right of every Session row: choose which ones show and in what order per session, and let plugin-authoring Sessions hear about layout changes and register their own button through the session_quickbar tool."
+  }
+}
