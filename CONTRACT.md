@@ -34,7 +34,7 @@ window.dshSessionQuickbar = {
   labels: { zh: '词卡', en: 'Word card' },   // 必填至少一种，≤40 字
   hint: { zh: '打开俄语词卡', en: 'Open the word card' },  // 可选，≤160 字
   owner: 'dsh-session-stars', // 可选，所属包名；设置页据此显示“已登记”
-  order: 120,                // 可选，默认 500；内置按钮是 10/20/30/40/50
+  order: 120,                // 可选，默认 500；内置按钮 10–90，默认只显示 todo（20）与 notify（60）
   icon: 'M3 8h10',           // 可选，16×16 viewBox 的 SVG path d；无 Component 时用它画
   isActive: (sessionId) => false,     // 可选，返回 true 时按钮高亮
   onActivate: (sessionId) => {},      // 与 Component 二选一

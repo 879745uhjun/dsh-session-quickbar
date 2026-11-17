@@ -36,7 +36,7 @@
     "dsh": ">=0.2.2-rc.1 <0.3.0"
   },
   "scripts": {
-    "test": "node test/host.test.mjs"
+    "test": "node --test \"test/**/*.test.mjs\""
   },
   "license": "MIT",
   "author": "879745uhjun",

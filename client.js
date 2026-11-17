@@ -33,6 +33,11 @@ window.__ModuleLoader__.load({
     const STARS_EVENTS = '/session-stars/events'
     const TODOS_ENDPOINT = '/session-todos'
     const TODOS_EVENTS = '/session-todos/events'
+    const NOTIFY_ENDPOINT = '/session-notify'
+    const NOTIFY_EVENTS = '/session-notify/events'
+    const TRANSFER_EXPORT = '/session-transfer/export'
+    const TOKEN_ENDPOINT = '/token-usage'
+    const BOXES_ENDPOINT = '/session-boxes'
     const API_VERSION = 1
     const MAX_ITEMS = 24
     const MAX_CATALOG_ROWS = 200
@@ -112,6 +117,26 @@ window.__ModuleLoader__.load({
       'bar.unpin': 'Unpin session',
       'bar.copy': 'Copy session id',
       'bar.copied': 'Copied',
+      'bar.notify': 'Alert me when this session finishes',
+      'bar.notifyOn': 'Stop the finish alert',
+      'bar.pack': 'Pack this session into a file',
+      'bar.packBusy': 'Packing…',
+      'bar.packDone': 'Pack downloaded',
+      'bar.packFailed': 'Could not pack',
+      'bar.packFailedReason': 'Could not pack: {reason}',
+      'bar.token': '{n} tokens · {cost}',
+      'bar.boxes': 'Group boxes',
+      'bar.boxesOn': '{n} box(es) · {name}',
+      'popover.token': 'Token usage',
+      'popover.input': 'Input',
+      'popover.output': 'Output',
+      'popover.cacheRead': 'Cache read',
+      'popover.cacheWrite': 'Cache write',
+      'popover.cacheHit': 'Cache hit rate',
+      'popover.noUsage': 'No usage recorded for this session yet',
+      'popover.boxesTitle': 'Move into a box',
+      'popover.noBoxes': 'No box yet — create one in the sidebar',
+      'popover.clearBoxes': 'Remove from all boxes',
       'bar.settings': 'Quick bar settings',
       'bar.pending': '{n} messages are queued until this session starts',
       'menu.label': 'Quick bar…',
@@ -192,6 +217,26 @@ window.__ModuleLoader__.load({
       'bar.unpin': '取消置顶',
       'bar.copy': '复制会话 ID',
       'bar.copied': '已复制',
+      'bar.notify': '这个会话结束时提醒我',
+      'bar.notifyOn': '关闭完成提醒',
+      'bar.pack': '把这个会话打包成文件',
+      'bar.packBusy': '打包中…',
+      'bar.packDone': '打包已下载',
+      'bar.packFailed': '打包失败',
+      'bar.packFailedReason': '打包失败：{reason}',
+      'bar.token': '{n} tokens · {cost}',
+      'bar.boxes': '分组盒子',
+      'bar.boxesOn': '{n} 个盒子 · {name}',
+      'popover.token': 'Token 用量',
+      'popover.input': '输入',
+      'popover.output': '输出',
+      'popover.cacheRead': '缓存读',
+      'popover.cacheWrite': '缓存写',
+      'popover.cacheHit': '缓存命中率',
+      'popover.noUsage': '这个会话还没有用量记录',
+      'popover.boxesTitle': '移入分组盒子',
+      'popover.noBoxes': '还没有盒子，先在侧边栏创建一个',
+      'popover.clearBoxes': '移出全部盒子',
       'bar.settings': '快捷栏设置',
       'bar.pending': '有 {n} 条消息排队，等这个会话启动后送达',
       'menu.label': '快捷栏设置…',
@@ -211,6 +256,43 @@ window.__ModuleLoader__.load({
 
     const CSS = [
       '.sq-bar{display:inline-flex;align-items:center;gap:4px;flex:none}',
+      '.sq-token{width:auto;min-width:22px;padding:0 5px;font-size:10px;font-variant-numeric:tabular-nums}',
+      '.sq-boxbtn{gap:2px}',
+      '.sq-boxdot{width:8px;height:8px;border-radius:50%;flex:none;display:inline-block;background:var(--dsw-alias-label-tertiary)}',
+      '.sq-boxdot[data-color=blue]{background:var(--dsw-alias-state-business-primary)}',
+      '.sq-boxdot[data-color=green]{background:var(--dsw-alias-state-success-primary)}',
+      '.sq-boxdot[data-color=amber]{background:var(--dsw-alias-state-warn-primary)}',
+      '.sq-boxdot[data-color=red]{background:var(--dsw-alias-state-error-primary)}',
+      '.sq-boxdot[data-color=purple]{background:#a78bfa}',
+      '.sq-boxdot[data-color=pink]{background:#f472b6}',
+      '.sq-boxdot[data-color=cyan]{background:#22d3ee}',
+      '.sq-boxdot[data-color=gray]{background:var(--dsw-alias-label-tertiary)}',
+      '.sq-boxcount{font-size:9px;line-height:1;font-variant-numeric:tabular-nums}',
+      '.sq-popover{position:fixed;z-index:62;box-sizing:border-box;padding:12px 14px;border-radius:12px;',
+      'background:var(--dsw-alias-bg-layer-1);border:.5px solid var(--dsw-alias-border-l2);',
+      'box-shadow:0 14px 40px color-mix(in srgb,#000 30%,transparent);display:flex;flex-direction:column;gap:10px}',
+      '.sq-popover-body{display:flex;flex-direction:column;gap:10px}',
+      '.sq-popover-head{font-size:12px;line-height:17px;font-weight:600;overflow:hidden;',
+      'text-overflow:ellipsis;white-space:nowrap}',
+      '.sq-token-total{display:flex;align-items:baseline;justify-content:space-between;gap:8px;',
+      'font-size:18px;line-height:24px;font-weight:600;font-variant-numeric:tabular-nums}',
+      '.sq-token-cost{font-size:11px;font-weight:400;color:var(--dsw-alias-label-tertiary)}',
+      '.sq-kv{display:grid;grid-template-columns:1fr auto;gap:4px 12px;margin:0;font-size:11px;line-height:16px}',
+      '.sq-kv dt{color:var(--dsw-alias-label-tertiary)}',
+      '.sq-kv dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}',
+      '.sq-days{display:flex;flex-direction:column;gap:2px;border-top:.5px solid var(--dsw-alias-border-l2);padding-top:8px}',
+      '.sq-day{display:flex;justify-content:space-between;font-size:10px;line-height:15px;',
+      'color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums}',
+      '.sq-boxlist{display:flex;flex-direction:column;gap:2px;max-height:240px;overflow:auto}',
+      '.sq-boxrow{appearance:none;display:flex;align-items:center;gap:8px;width:100%;box-sizing:border-box;',
+      'border:0;border-radius:7px;background:transparent;color:var(--dsw-alias-label-primary);',
+      'font:inherit;font-size:12px;line-height:18px;padding:5px 7px;text-align:left;cursor:pointer}',
+      '.sq-boxrow:hover{background:var(--dsw-alias-interactive-bg-hover)}',
+      '.sq-boxrow[data-on=true]{background:var(--dsw-alias-bg-layer-2)}',
+      '.sq-boxrow[data-depth="1"]{padding-left:20px}',
+      '.sq-boxrow svg{width:12px;height:12px;margin-left:auto;color:var(--dsw-alias-state-success-primary)}',
+      '.sq-boxname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.sq-boxclear{align-self:flex-start}',
       '.sq-pending{flex:none;display:inline-flex;align-items:center;justify-content:center;min-width:15px;height:15px;',
       'padding:0 3px;border-radius:999px;font-size:9px;line-height:15px;font-weight:600;',
       'color:var(--dsw-alias-state-warn-primary);background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 16%,transparent)}',
@@ -456,6 +538,13 @@ window.__ModuleLoader__.load({
       const list = sessionCatalog(ctx)
       if (list === undefined) return undefined
       return catalogSnapshot(list).byId[sessionId]
+    }
+
+    /** The session title from the catalog, or an empty string. */
+    function titleOf(ctx, sessionId) {
+      const summary = summaryOf(ctx, sessionId)
+      if (summary === undefined || typeof summary.title !== 'string') return ''
+      return summary.title.trim()
     }
 
     /** Trailing path segment of a working directory. */
@@ -868,6 +957,556 @@ window.__ModuleLoader__.load({
     }
 
     /* ------------------------------------------------------------------ *
+     * Optional adapters: finish alerts and session packing
+     * ------------------------------------------------------------------ */
+
+    /** The notify plugin's watch list, read and written over its own route. */
+    function createNotifyStore() {
+      let state = { status: 'loading', watched: {}, available: true }
+      const listeners = new Set()
+      let inflight = null
+      let warned = false
+
+      function publish(next) {
+        state = next
+        for (const listener of listeners) listener()
+      }
+
+      function refresh() {
+        if (inflight !== null) return inflight
+        inflight = (async () => {
+          try {
+            const response = await fetch(NOTIFY_ENDPOINT, { headers: { accept: 'application/json' }, cache: 'no-store' })
+            if (!response.ok) throw new Error('HTTP ' + response.status)
+            const payload = await response.json()
+            if (payload?.ok !== true) throw new Error(payload?.error ?? 'invalid response')
+            publish({ status: 'ready', watched: payload.watched ?? {}, available: true })
+            warned = false
+          } catch (error) {
+            if (!warned) {
+              warned = true
+              console.warn('[session-quickbar] the session-notify route is unavailable:', error)
+            }
+            publish({ status: 'ready', watched: {}, available: false })
+          } finally {
+            inflight = null
+          }
+        })()
+        return inflight
+      }
+
+      function applyServer(raw) {
+        publish({ status: 'ready', watched: raw ?? {}, available: true })
+      }
+
+      async function toggle(sessionId, title) {
+        const previous = state
+        const watching = state.watched[sessionId] !== undefined
+        const nextWatched = { ...state.watched }
+        if (watching) delete nextWatched[sessionId]
+        else nextWatched[sessionId] = { title }
+        publish({ ...state, watched: nextWatched })
+        try {
+          const response = await fetch(NOTIFY_ENDPOINT, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', accept: 'application/json' },
+            body: JSON.stringify({
+              sessionId,
+              action: watching ? 'unwatch' : 'watch',
+              title,
+              locale: languageOf(),
+            }),
+          })
+          const payload = await response.json().catch(() => null)
+          if (!response.ok || payload?.ok !== true) throw new Error(payload?.error ?? 'HTTP ' + response.status)
+          if (payload.watched !== null && typeof payload.watched === 'object') {
+            publish({ status: 'ready', watched: payload.watched, available: true })
+          }
+          return { ok: true }
+        } catch (error) {
+          publish(previous)
+          console.warn('[session-quickbar] could not change the finish alert:', error)
+          return { ok: false, error }
+        }
+      }
+
+      return {
+        getSnapshot: () => state,
+        subscribe(listener) {
+          listeners.add(listener)
+          return () => { listeners.delete(listener) }
+        },
+        refresh,
+        applyServer,
+        toggle,
+      }
+    }
+
+    /** Download one session pack through the transfer plugin's export route. */
+    async function packSession(ctx, sessionId, onProgress) {
+      const title = titleOf(ctx, sessionId)
+      const query = new URLSearchParams({ sessionId })
+      if (title !== '') query.set('title', title)
+      const response = await fetch(TRANSFER_EXPORT + '?' + query.toString(), { cache: 'no-store' })
+      if (!response.ok) {
+        let payload
+        try {
+          payload = await response.json()
+        } catch {
+          payload = undefined
+        }
+        const error = new Error(typeof payload?.error === 'string' && payload.error !== '' ? payload.error : 'HTTP ' + response.status)
+        error.code = typeof payload?.code === 'string' ? payload.code : 'HTTP_' + response.status
+        throw error
+      }
+      const total = Number(response.headers.get('content-length')) || 0
+      const disposition = response.headers.get('content-disposition') ?? ''
+      const match = /filename\*=UTF-8''([^;]+)/i.exec(disposition) ?? /filename="?([^";]+)"?/i.exec(disposition)
+      const filename = match === null
+        ? 'session-' + sessionId.slice(0, 8) + '.dshpack'
+        : decodeURIComponent(match[1])
+      const reader = response.body.getReader()
+      const chunks = []
+      let received = 0
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        chunks.push(value)
+        received += value.length
+        onProgress(received, total)
+      }
+      const blob = new Blob(chunks, { type: 'application/zip' })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = filename
+      anchor.rel = 'noopener'
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 5000)
+      return { filename, bytes: received }
+    }
+
+    /** Bell: follow this session's finish alerts (session-notify). */
+    function NotifyButton({ ctx, sessionId, notify, t }) {
+      const state = useStore(notify)
+      const watched = state.watched[sessionId] !== undefined
+      const [busy, setBusy] = useState(false)
+      const label = watched ? t('bar.notifyOn') : t('bar.notify')
+      return h(BarButton, {
+        label,
+        active: watched,
+        disabled: busy,
+        onClick: async () => {
+          setBusy(true)
+          await notify.toggle(sessionId, titleOf(ctx, sessionId))
+          setBusy(false)
+        },
+      }, h(IconBell, { filled: watched }))
+    }
+
+    /** Arrow: pack this session into a portable .dshpack (session-transfer). */
+    function PackButton({ ctx, sessionId, t }) {
+      const [phase, setPhase] = useState('idle')
+      const [failure, setFailure] = useState('')
+      const timer = useRef(0)
+      useEffect(() => () => window.clearTimeout(timer.current), [])
+      const label = phase === 'busy'
+        ? t('bar.packBusy')
+        : phase === 'done' ? t('bar.packDone') : phase === 'failed' ? t('bar.packFailed') : t('bar.pack')
+      return h(BarButton, {
+        label,
+        title: phase === 'failed' && failure !== '' ? t('bar.packFailedReason', { reason: failure }) : undefined,
+        active: phase === 'done',
+        tone: phase === 'failed' ? 'warn' : undefined,
+        disabled: phase === 'busy',
+        onClick: async () => {
+          if (phase === 'busy') return
+          setPhase('busy')
+          setFailure('')
+          try {
+            await packSession(ctx, sessionId, () => {})
+            setPhase('done')
+            window.clearTimeout(timer.current)
+            timer.current = window.setTimeout(() => setPhase('idle'), 2500)
+          } catch (error) {
+            const reason = error instanceof Error ? error.message : String(error)
+            console.warn('[session-quickbar] could not pack the session:', error?.code ?? 'UNKNOWN', reason)
+            setFailure(reason)
+            setPhase('failed')
+            window.clearTimeout(timer.current)
+            timer.current = window.setTimeout(() => setPhase('idle'), 3000)
+          }
+        },
+      }, h(IconPack))
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Optional adapters: token usage and session boxes
+     * ------------------------------------------------------------------ */
+
+    /** Compact token counts for the strip and the popover. */
+    function formatTokens(value) {
+      const n = Number(value) || 0
+      if (n >= 1e9) return (n / 1e9).toFixed(2).replace(/\.?0+$/, '') + 'B'
+      if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M'
+      if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'K'
+      return String(Math.round(n))
+    }
+
+    /** Money for the token popover. */
+    function formatCost(value) {
+      const n = Number(value) || 0
+      return '$' + (n >= 100 ? n.toFixed(0) : n >= 1 ? n.toFixed(2) : n.toFixed(3))
+    }
+
+    /** The token-usage plugin's per-session report, refreshed lazily. */
+    function createTokenStore() {
+      let state = { status: 'loading', available: true, byId: {} }
+      const listeners = new Set()
+      let inflight = null
+      let fetchedAt = 0
+      let warned = false
+
+      function publish(next) {
+        state = next
+        for (const listener of listeners) listener()
+      }
+
+      function refresh(force) {
+        if (inflight !== null) return inflight
+        if (force !== true && state.status === 'ready' && Date.now() - fetchedAt < 60_000) return Promise.resolve()
+        inflight = (async () => {
+          try {
+            const response = await fetch(TOKEN_ENDPOINT, { headers: { accept: 'application/json' }, cache: 'no-store' })
+            if (!response.ok) throw new Error('HTTP ' + response.status)
+            const payload = await response.json()
+            if (payload?.ok !== true) throw new Error(payload?.error ?? 'invalid response')
+            const byId = {}
+            for (const row of Array.isArray(payload.sessions) ? payload.sessions : []) {
+              if (row === null || typeof row !== 'object' || typeof row.sessionId !== 'string') continue
+              byId[row.sessionId] = {
+                total: Number(row.total) || 0,
+                input: Number(row.input) || 0,
+                output: Number(row.output) || 0,
+                cacheRead: Number(row.cacheRead) || 0,
+                cacheWrite: Number(row.cacheWrite) || 0,
+                cost: Number(row.cost) || 0,
+                cacheHitRate: Number(row.cacheHitRate) || 0,
+                turns: Number(row.turns) || 0,
+                days: Array.isArray(row.days) ? row.days.slice(-7) : [],
+              }
+            }
+            fetchedAt = Date.now()
+            publish({ status: 'ready', available: true, byId })
+            warned = false
+          } catch (error) {
+            if (!warned) {
+              warned = true
+              console.warn('[session-quickbar] the token-usage route is unavailable:', error)
+            }
+            publish({ status: 'ready', available: false, byId: {} })
+          } finally {
+            inflight = null
+          }
+        })()
+        return inflight
+      }
+
+      return {
+        getSnapshot: () => state,
+        subscribe(listener) {
+          listeners.add(listener)
+          return () => { listeners.delete(listener) }
+        },
+        refresh,
+      }
+    }
+
+    /** The session-boxes plugin's boxes and memberships. */
+    function createBoxesStore() {
+      let state = { status: 'loading', available: true, boxes: [], memberships: {} }
+      const listeners = new Set()
+      let inflight = null
+      let warned = false
+
+      function publish(next) {
+        state = next
+        for (const listener of listeners) listener()
+      }
+
+      function applyState(raw) {
+        const boxes = []
+        const memberships = {}
+        const source = raw === null || typeof raw !== 'object' ? {} : raw
+        for (const box of Array.isArray(source.boxes) ? source.boxes : []) {
+          if (box === null || typeof box !== 'object' || typeof box.id !== 'string') continue
+          boxes.push({
+            id: box.id,
+            name: typeof box.name === 'string' ? box.name : box.id,
+            color: typeof box.color === 'string' ? box.color : 'gray',
+            parentId: typeof box.parentId === 'string' ? box.parentId : null,
+            order: Number(box.order) || 0,
+          })
+        }
+        for (const [sessionId, ids] of Object.entries(source.memberships ?? {})) {
+          if (Array.isArray(ids)) memberships[sessionId] = ids.filter((id) => typeof id === 'string')
+        }
+        publish({ status: 'ready', available: true, boxes, memberships })
+      }
+
+      function refresh() {
+        if (inflight !== null) return inflight
+        inflight = (async () => {
+          try {
+            const response = await fetch(BOXES_ENDPOINT, { headers: { accept: 'application/json' }, cache: 'no-store' })
+            if (!response.ok) throw new Error('HTTP ' + response.status)
+            const payload = await response.json()
+            if (payload?.ok !== true) throw new Error(payload?.error ?? 'invalid response')
+            applyState(payload.state)
+            warned = false
+          } catch (error) {
+            if (!warned) {
+              warned = true
+              console.warn('[session-quickbar] the session-boxes route is unavailable:', error)
+            }
+            publish({ status: 'ready', available: false, boxes: [], memberships: {} })
+          } finally {
+            inflight = null
+          }
+        })()
+        return inflight
+      }
+
+      async function assign(sessionId, boxIds) {
+        const previous = state
+        publish({ ...state, memberships: { ...state.memberships, [sessionId]: boxIds } })
+        try {
+          const response = await fetch(BOXES_ENDPOINT, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', accept: 'application/json' },
+            body: JSON.stringify({ action: 'assign', sessionId, boxIds }),
+          })
+          const payload = await response.json().catch(() => null)
+          if (!response.ok || payload?.ok !== true) throw new Error(payload?.error ?? 'HTTP ' + response.status)
+          if (payload.state !== undefined) applyState(payload.state)
+          return { ok: true }
+        } catch (error) {
+          publish(previous)
+          console.warn('[session-quickbar] could not change the box membership:', error)
+          return { ok: false, error }
+        }
+      }
+
+      return {
+        getSnapshot: () => state,
+        subscribe(listener) {
+          listeners.add(listener)
+          return () => { listeners.delete(listener) }
+        },
+        refresh,
+        assign,
+      }
+    }
+
+    /** Boxes in display order, children right after their parent. */
+    function flattenBoxes(boxes) {
+      const rows = []
+      const tops = boxes.filter((box) => box.parentId === null).sort((left, right) => left.order - right.order)
+      for (const top of tops) {
+        rows.push({ ...top, depth: 0 })
+        const children = boxes.filter((box) => box.parentId === top.id).sort((left, right) => left.order - right.order)
+        for (const child of children) rows.push({ ...child, depth: 1 })
+      }
+      for (const box of boxes) {
+        if (!rows.some((row) => row.id === box.id)) rows.push({ ...box, depth: 0 })
+      }
+      return rows
+    }
+
+    /** Anchor one popover under (or above) the button that opened it. */
+    function popoverPosition(rect) {
+      const width = 268
+      const height = 280
+      const margin = 10
+      const viewportWidth = typeof window === 'undefined' ? 1200 : window.innerWidth
+      const viewportHeight = typeof window === 'undefined' ? 900 : window.innerHeight
+      const left = Math.max(margin, Math.min(rect.right - width, viewportWidth - width - margin))
+      const below = rect.bottom + 8
+      const top = below + height > viewportHeight ? Math.max(margin, rect.top - height - 8) : below
+      return { left, top, width }
+    }
+
+    /** Open one popover for a session from a bar button. */
+    function openPopover(popover, kind, sessionId, event) {
+      const rect = event.currentTarget.getBoundingClientRect()
+      popover.set({
+        kind,
+        sessionId,
+        rect: { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom },
+      })
+    }
+
+    function TokenButton({ ctx, sessionId, token, popover, t }) {
+      const state = useStore(token)
+      const entry = state.byId[sessionId]
+      if (entry === undefined) return null
+      const label = t('bar.token', { n: formatTokens(entry.total), cost: formatCost(entry.cost) })
+      return h('button', {
+        type: 'button',
+        className: 'sq-btn sq-token',
+        title: label,
+        'aria-label': label,
+        onClick: (event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          openPopover(popover, 'token', sessionId, event)
+        },
+        onPointerDown: (event) => event.stopPropagation(),
+      }, formatTokens(entry.total))
+    }
+
+    function BoxButton({ sessionId, boxes, popover, t }) {
+      const state = useStore(boxes)
+      const ids = state.memberships[sessionId] ?? []
+      const first = state.boxes.find((box) => box.id === ids[0])
+      const label = ids.length === 0
+        ? t('bar.boxes')
+        : t('bar.boxesOn', { n: ids.length, name: first === undefined ? '' : first.name })
+      return h('button', {
+        type: 'button',
+        className: 'sq-btn sq-boxbtn',
+        title: label,
+        'aria-label': label,
+        'data-active': ids.length > 0 ? 'true' : 'false',
+        onClick: (event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          openPopover(popover, 'boxes', sessionId, event)
+        },
+        onPointerDown: (event) => event.stopPropagation(),
+      },
+        ids.length === 0
+          ? h(IconBox)
+          : h('span', { className: 'sq-boxdot', 'data-color': first === undefined ? 'gray' : first.color }),
+        ids.length > 1 ? h('span', { className: 'sq-boxcount' }, String(ids.length)) : null)
+    }
+
+    function IconBox() {
+      return h('svg', { viewBox: '0 0 16 16', 'aria-hidden': 'true' },
+        h('path', {
+          d: 'M2.6 4.6l5.4-2 5.4 2v6.8l-5.4 2-5.4-2z',
+          fill: 'none',
+          stroke: 'currentColor',
+          strokeWidth: 1.25,
+          strokeLinejoin: 'round',
+        }),
+        h('path', { d: 'M2.6 4.6L8 6.6l5.4-2M8 6.6v6.8', fill: 'none', stroke: 'currentColor', strokeWidth: 1.25, strokeLinejoin: 'round' }))
+    }
+
+    function kvRow(label, value) {
+      return h(React.Fragment, { key: label }, h('dt', null, label), h('dd', null, value))
+    }
+
+    /** Token breakdown for one session. */
+    function TokenPanel({ sessionId, ctx, token, t }) {
+      const state = useStore(token)
+      const entry = state.byId[sessionId]
+      const title = titleOf(ctx, sessionId)
+      return h('div', { className: 'sq-popover-body' },
+        h('div', { className: 'sq-popover-head' }, title === '' ? shortId(sessionId) : title),
+        entry === undefined
+          ? h('p', { className: 'sq-note' }, t('popover.noUsage'))
+          : h(React.Fragment, null,
+            h('div', { className: 'sq-token-total' },
+              formatTokens(entry.total),
+              h('span', { className: 'sq-token-cost' }, formatCost(entry.cost))),
+            h('dl', { className: 'sq-kv' },
+              kvRow(t('popover.input'), formatTokens(entry.input)),
+              kvRow(t('popover.output'), formatTokens(entry.output)),
+              kvRow(t('popover.cacheRead'), formatTokens(entry.cacheRead)),
+              kvRow(t('popover.cacheWrite'), formatTokens(entry.cacheWrite)),
+              kvRow(t('popover.cacheHit'), (entry.cacheHitRate * 100).toFixed(1) + '%')),
+            entry.days.length === 0
+              ? null
+              : h('div', { className: 'sq-days' }, entry.days.map((day) => h('div', { key: day.day, className: 'sq-day' },
+                h('span', null, String(day.day).slice(5)),
+                h('span', null, formatTokens(Number(day.total) || 0)))))))
+    }
+
+    /** Box membership picker for one session. */
+    function BoxPanel({ sessionId, boxes, t }) {
+      const state = useStore(boxes)
+      const ids = state.memberships[sessionId] ?? []
+      const rows = flattenBoxes(state.boxes)
+      return h('div', { className: 'sq-popover-body' },
+        h('div', { className: 'sq-popover-head' }, t('popover.boxesTitle')),
+        rows.length === 0
+          ? h('p', { className: 'sq-note' }, t('popover.noBoxes'))
+          : h('div', { className: 'sq-boxlist' }, rows.map((box) => {
+            const on = ids.includes(box.id)
+            return h('button', {
+              key: box.id,
+              type: 'button',
+              className: 'sq-boxrow',
+              'data-on': on ? 'true' : 'false',
+              'data-depth': box.depth,
+              onClick: () => {
+                void boxes.assign(sessionId, on ? ids.filter((id) => id !== box.id) : [...ids, box.id])
+              },
+            },
+              h('span', { className: 'sq-boxdot', 'data-color': box.color }),
+              h('span', { className: 'sq-boxname' }, box.name),
+              on ? h(IconCheck) : null)
+          })),
+        ids.length === 0
+          ? null
+          : h('button', {
+            type: 'button',
+            className: 'sq-btn-ghost sq-boxclear',
+            onClick: () => { void boxes.assign(sessionId, []) },
+          }, t('popover.clearBoxes')))
+    }
+
+    /** The single overlay that hosts both popovers. */
+    function QuickbarPopover({ ctx, deps }) {
+      const { popover, token, boxes } = deps
+      const request = useStore(popover)
+      const t = useT(ctx)
+      const surface = useRef(null)
+      useEffect(() => {
+        if (request === null) return undefined
+        const onKey = (event) => {
+          if (event.key !== 'Escape') return
+          event.stopPropagation()
+          popover.set(null)
+        }
+        const onDown = (event) => {
+          const node = surface.current
+          if (node !== null && node.contains(event.target)) return
+          popover.set(null)
+        }
+        document.addEventListener('keydown', onKey, true)
+        document.addEventListener('pointerdown', onDown, true)
+        return () => {
+          document.removeEventListener('keydown', onKey, true)
+          document.removeEventListener('pointerdown', onDown, true)
+        }
+      }, [request, popover])
+      if (request === null) return null
+      return h('div', {
+        className: 'sq-popover',
+        style: popoverPosition(request.rect),
+        ref: surface,
+        role: 'dialog',
+        'aria-label': request.kind === 'token' ? t('popover.token') : t('popover.boxes'),
+      }, request.kind === 'token'
+        ? h(TokenPanel, { sessionId: request.sessionId, ctx, token, t })
+        : h(BoxPanel, { sessionId: request.sessionId, boxes, t }))
+    }
+
+    /* ------------------------------------------------------------------ *
      * Action registry shared with other plugins
      * ------------------------------------------------------------------ */
 
@@ -983,7 +1622,7 @@ window.__ModuleLoader__.load({
     }
 
     /** Resolve one layout into renderable entries, defaulting to the registry. */
-    function resolveEntries({ config, sessionId, registry, ratings, todos, language }) {
+    function resolveEntries({ config, sessionId, registry, ratings, todos, notify, token, boxes, language }) {
       const layout = effectiveItems(config, sessionId)
       const explicit = layout.items
       let items
@@ -1002,6 +1641,9 @@ window.__ModuleLoader__.load({
         if (descriptor === undefined) continue
         if (item.id === 'star' && ratings.available !== true) continue
         if (item.id === 'todo' && todos.available !== true) continue
+        if (item.id === 'notify' && notify.available !== true) continue
+        if (item.id === 'token' && (token.available !== true || token.byId[sessionId] === undefined)) continue
+        if (item.id === 'boxes' && boxes.available !== true) continue
         entries.push({ ...item, descriptor, labels: actionLabel(descriptor, language), hint: actionHint(descriptor, language) })
       }
       return entries
@@ -1011,15 +1653,52 @@ window.__ModuleLoader__.load({
      * Built-in actions
      * ------------------------------------------------------------------ */
 
+    function IconBell({ filled }) {
+      return h('svg', { viewBox: '0 0 16 16', 'aria-hidden': 'true' },
+        h('path', {
+          d: 'M8 2.1c-2.1 0-3.5 1.6-3.5 3.8v2.2L3.1 10.1h9.8L11.5 8.1V5.9c0-2.2-1.4-3.8-3.5-3.8z',
+          fill: filled ? 'currentColor' : 'none',
+          stroke: 'currentColor',
+          strokeWidth: 1.25,
+          strokeLinejoin: 'round',
+        }),
+        h('path', {
+          d: 'M6.4 11.7a1.7 1.7 0 003.2 0',
+          fill: 'none',
+          stroke: 'currentColor',
+          strokeWidth: 1.25,
+          strokeLinecap: 'round',
+        }))
+    }
+
+    function IconPack() {
+      return h('svg', { viewBox: '0 0 16 16', 'aria-hidden': 'true' },
+        h('path', {
+          d: 'M8 2.4v7.1M5.6 7.2L8 9.6l2.4-2.4',
+          fill: 'none',
+          stroke: 'currentColor',
+          strokeWidth: 1.3,
+          strokeLinecap: 'round',
+          strokeLinejoin: 'round',
+        }),
+        h('path', {
+          d: 'M2.9 11.3v1.3c0 .6.5 1.1 1.1 1.1h8c.6 0 1.1-.5 1.1-1.1v-1.3',
+          fill: 'none',
+          stroke: 'currentColor',
+          strokeWidth: 1.3,
+          strokeLinecap: 'round',
+        }))
+    }
+
     /** A row button: 22px, theme tokens, native tooltip, no row navigation. */
-    function BarButton({ label, active, tone, disabled, onClick, children }) {
+    function BarButton({ label, title, active, tone, disabled, onClick, children }) {
       return h('button', {
         type: 'button',
         className: 'sq-btn',
         'data-active': active === true ? 'true' : 'false',
         'data-tone': tone,
         'data-busy': disabled === true ? 'true' : undefined,
-        title: label,
+        title: title ?? label,
         'aria-label': label,
         'aria-pressed': active === undefined ? undefined : active === true,
         disabled: disabled === true,
@@ -1229,15 +1908,18 @@ window.__ModuleLoader__.load({
     }
 
     function QuickBar({ ctx, sessionId, deps }) {
-      const { configStore, registry, ratings, todos, confirm, panelIntent } = deps
+      const { configStore, registry, ratings, todos, notify, token, boxes, popover, confirm, panelIntent } = deps
       const state = useStore(configStore)
       const revision = useStore(registryStoreVersion(registry))
       useStore(ratings)
       useStore(todos)
+      useStore(notify)
+      useStore(token)
+      useStore(boxes)
       const t = useT(ctx)
       const language = languageOf()
       if (state.config === null) return null
-      const entries = resolveEntries({ config: state.config, sessionId, registry, ratings: ratings.getSnapshot(), todos: todos.getSnapshot(), language })
+      const entries = resolveEntries({ config: state.config, sessionId, registry, ratings: ratings.getSnapshot(), todos: todos.getSnapshot(), notify: notify.getSnapshot(), token: token.getSnapshot(), boxes: boxes.getSnapshot(), language })
       const pendingCount = state.config.messages.filter((message) => message.to === sessionId && message.deliveredAt === 0).length
       if (entries.length === 0 && pendingCount === 0) return null
       const takeover = state.config.global.takeover !== false
@@ -1254,6 +1936,10 @@ window.__ModuleLoader__.load({
         if (id === 'todo') return h(TodoButton, { key, ctx, sessionId, todos, t })
         if (id === 'pin') return h(PinButton, { key, ctx, sessionId, workspaces: deps.workspaces, t })
         if (id === 'archive') return h(ArchiveButton, { key, ctx, sessionId, workspaces: deps.workspaces, confirm, t })
+        if (id === 'notify') return h(NotifyButton, { key, ctx, sessionId, notify: deps.notify, t })
+        if (id === 'pack') return h(PackButton, { key, ctx, sessionId, t })
+        if (id === 'token') return h(TokenButton, { key, ctx, sessionId, token, popover, t })
+        if (id === 'boxes') return h(BoxButton, { key, ctx, sessionId, boxes, popover, t })
         if (id === 'copy-id') return h(CopyIdButton, { key, sessionId, t })
         return h(RegistryButton, { key, descriptor: entry.descriptor, sessionId, ctx })
       }), pendingCount > 0
@@ -1834,13 +2520,17 @@ window.__ModuleLoader__.load({
         const configStore = createConfigStore()
         const ratings = createRatingsStore()
         const todos = createTodosStore()
+        const notify = createNotifyStore()
+        const token = createTokenStore()
+        const boxes = createBoxesStore()
+        const popover = createStore(null)
         const registry = createRegistry()
         registry.versionStore = createStore(0)
         registry.subscribe(() => registry.versionStore.set((value) => value + 1))
         const confirm = createStore(null)
         const panelIntent = createStore(null)
         const workspaces = readService(ctx, 'workspaces')
-        const deps = { configStore, registry, ratings, todos, confirm, panelIntent, workspaces }
+        const deps = { configStore, registry, ratings, todos, notify, token, boxes, popover, confirm, panelIntent, workspaces }
 
         ctx.effect(() => {
           const style = document.createElement('style')
@@ -1860,12 +2550,20 @@ window.__ModuleLoader__.load({
             void configStore.refresh()
             void ratings.refresh()
             void todos.refresh()
+            void notify.refresh()
+          void token.refresh()
+          void boxes.refresh()
+            void token.refresh()
+            void boxes.refresh()
           }
           window.addEventListener('focus', refresh)
           document.addEventListener('visibilitychange', refresh)
           void configStore.refresh()
           void ratings.refresh()
           void todos.refresh()
+          void notify.refresh()
+          void token.refresh()
+          void boxes.refresh()
           return () => {
             window.removeEventListener('focus', refresh)
             document.removeEventListener('visibilitychange', refresh)
@@ -1893,6 +2591,7 @@ window.__ModuleLoader__.load({
           listen(EVENTS, 'config', (data) => configStore.applyServer(data.config))
           listen(STARS_EVENTS, 'ratings', (data) => ratings.applyServer(data.ratings))
           listen(TODOS_EVENTS, 'todos', (data) => todos.applyServer(data.todos))
+          listen(NOTIFY_EVENTS, 'watched', (data) => notify.applyServer(data.watched))
           return () => {
             for (const entry of sources) {
               entry.source.removeEventListener(entry.event, entry.handler)
@@ -1924,11 +2623,15 @@ window.__ModuleLoader__.load({
         // Built-in actions ride the same registry as plugin-contributed ones.
         ctx.effect(() => {
           const builtins = [
-            { id: 'star', order: 10, labels: { zh: '星标', en: 'Star' }, hint: { zh: '给这个会话打星标（复用会话星标插件的数据）', en: 'Star this session (uses the session-stars plugin data)' } },
+            { id: 'star', order: 10, hiddenByDefault: true, labels: { zh: '星标', en: 'Star' }, hint: { zh: '给这个会话打星标（复用会话星标插件的数据）', en: 'Star this session (uses the session-stars plugin data)' } },
             { id: 'todo', order: 20, labels: { zh: '待办', en: 'Todo' }, hint: { zh: '勾选这个会话的待办（复用会话待办插件的数据）', en: 'Check this session todo (uses the session-todos plugin data)' } },
-            { id: 'archive', order: 30, labels: { zh: '归档', en: 'Archive' }, hint: { zh: '归档或取消归档这个会话', en: 'Archive or unarchive this session' } },
-            { id: 'pin', order: 40, labels: { zh: '置顶', en: 'Pin' }, hint: { zh: '置顶或取消置顶这个会话', en: 'Pin or unpin this session' } },
+            { id: 'archive', order: 30, hiddenByDefault: true, labels: { zh: '归档', en: 'Archive' }, hint: { zh: '归档或取消归档这个会话', en: 'Archive or unarchive this session' } },
+            { id: 'pin', order: 40, hiddenByDefault: true, labels: { zh: '置顶', en: 'Pin' }, hint: { zh: '置顶或取消置顶这个会话', en: 'Pin or unpin this session' } },
             { id: 'copy-id', order: 50, hiddenByDefault: true, labels: { zh: '复制 ID', en: 'Copy ID' }, hint: { zh: '复制这个会话的 ID', en: 'Copy this session id' } },
+            { id: 'notify', order: 60, labels: { zh: '完成提醒', en: 'Finish alert' }, hint: { zh: '这个会话结束时在右下角弹出提醒（复用会话提醒插件）', en: 'Show a desktop card when this session finishes (uses the session-notify plugin)' } },
+            { id: 'pack', order: 70, hiddenByDefault: true, labels: { zh: '打包', en: 'Pack' }, hint: { zh: '把这个会话打包成可移植文件（复用会话迁移插件）', en: 'Pack this session into a portable file (uses the session-transfer plugin)' } },
+            { id: 'token', order: 80, hiddenByDefault: true, labels: { zh: '用量', en: 'Usage' }, hint: { zh: '这个会话的 token 用量，点开看明细（复用 Token 用量插件）', en: 'Token usage for this session, click for the breakdown (uses the token-usage plugin)' } },
+            { id: 'boxes', order: 90, hiddenByDefault: true, labels: { zh: '盒子', en: 'Boxes' }, hint: { zh: '把这个会话放进分组盒子（复用会话盒子插件）', en: 'Put this session into a group box (uses the session-boxes plugin)' } },
           ]
           const disposers = builtins.map((descriptor) => registry.register({ ...descriptor, builtin: true }))
           return () => {
@@ -1940,6 +2643,7 @@ window.__ModuleLoader__.load({
         const Page = (props) => h(QuickbarPage, { ...props, deps, ctx })
         const MenuItem = (props) => h(SessionMenuEntry, { ...props, deps, ctx })
         const Dialog = (props) => h(ArchiveDialog, { ...props, deps, ctx })
+        const Popover = (props) => h(QuickbarPopover, { ...props, deps, ctx })
         const Icon = (props) => h(PanelIcon, props)
         const t = ctx.locale.bind(NS)
 
@@ -1953,7 +2657,7 @@ window.__ModuleLoader__.load({
         ctx.slots.inject('sidebar.workspaces.session.menu.item', () => ctx.slots.register({
           name: 'sidebar.workspaces.session.menu.item',
           id: 'session-quickbar-menu',
-          order: 106,
+          order: 200,
           locale: NS,
         }, MenuItem))
 
@@ -1977,6 +2681,13 @@ window.__ModuleLoader__.load({
           order: 60,
           locale: NS,
         }, Dialog))
+
+        ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+          name: 'shell.overlay',
+          id: 'session-quickbar-popover',
+          order: 61,
+          locale: NS,
+        }, Popover))
       },
     }
   },

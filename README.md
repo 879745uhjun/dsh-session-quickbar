@@ -32,7 +32,7 @@ Open the settings page:
 
 - **全局默认 / Global default** — the layout every Session inherits, plus the takeover switch.
 - **单个会话 / One session** — pick a Session, then toggle and reorder just that row. **改用全局布局** drops the override.
-- **恢复默认 / Restore defaults** — clears the explicit layout so the built-in order (star, todo, archive, pin) applies again.
+- **恢复默认 / Restore defaults** — clears the explicit layout so the built-in default applies again: the todo square and the finish alert, two buttons.
 
 The layout file is `session-quickbar.json` under `$DSH_HOME`. Deleting it restores the defaults. Turn the plugin off and the strip disappears; the star and todo plugins keep their own buttons.
 

@@ -77,6 +77,7 @@ const BUILTIN_ACTIONS = [
   {
     id: 'star',
     order: 10,
+    hiddenByDefault: true,
     labels: { zh: '星标', en: 'Star' },
     hint: { zh: '给这个会话打星标（复用会话星标插件的数据）', en: 'Star this session (uses the session-stars plugin data)' },
   },
@@ -89,12 +90,14 @@ const BUILTIN_ACTIONS = [
   {
     id: 'archive',
     order: 30,
+    hiddenByDefault: true,
     labels: { zh: '归档', en: 'Archive' },
     hint: { zh: '归档或取消归档这个会话', en: 'Archive or unarchive this session' },
   },
   {
     id: 'pin',
     order: 40,
+    hiddenByDefault: true,
     labels: { zh: '置顶', en: 'Pin' },
     hint: { zh: '置顶或取消置顶这个会话', en: 'Pin or unpin this session' },
   },
@@ -104,6 +107,33 @@ const BUILTIN_ACTIONS = [
     hiddenByDefault: true,
     labels: { zh: '复制 ID', en: 'Copy ID' },
     hint: { zh: '复制这个会话的 ID', en: 'Copy this session id' },
+  },
+  {
+    id: 'notify',
+    order: 60,
+    labels: { zh: '完成提醒', en: 'Finish alert' },
+    hint: { zh: '这个会话结束时在右下角弹出提醒（复用会话提醒插件）', en: 'Show a desktop card when this session finishes (uses the session-notify plugin)' },
+  },
+  {
+    id: 'pack',
+    order: 70,
+    hiddenByDefault: true,
+    labels: { zh: '打包', en: 'Pack' },
+    hint: { zh: '把这个会话打包成可移植文件（复用会话迁移插件）', en: 'Pack this session into a portable file (uses the session-transfer plugin)' },
+  },
+  {
+    id: 'token',
+    order: 80,
+    hiddenByDefault: true,
+    labels: { zh: '用量', en: 'Usage' },
+    hint: { zh: '这个会话的 token 用量，点开看明细（复用 Token 用量插件）', en: 'Token usage for this session, click for the breakdown (uses the token-usage plugin)' },
+  },
+  {
+    id: 'boxes',
+    order: 90,
+    hiddenByDefault: true,
+    labels: { zh: '盒子', en: 'Boxes' },
+    hint: { zh: '把这个会话放进分组盒子（复用会话盒子插件）', en: 'Put this session into a group box (uses the session-boxes plugin)' },
   },
 ]
 
@@ -1021,79 +1051,82 @@ function createTool({ store, log, deliver, agents, scanPlugins }) {
       + 'Use action "get" to read the layout in force, "set" to replace one layout, "reset" to drop an override, "register" to announce a button id you are building, "unregister" to remove it, "watch"/"unwatch" to subscribe this Session to layout changes, "notify" to send a message to another Session, "messages" to read the channel, "sessions" to list known Session ids and titles, and "plugins" to list the installed profile bundles that could contribute a button. '
       + 'Registering and watching is how an authoring Session learns where its button landed; every layout change is injected into watching Sessions, and they answer with "notify". A notify wakes an idle target by default (pass wake:false to queue silently).',
     parameters: {
-      action: {
-        type: 'string',
-        required: true,
-        enum: ['get', 'set', 'reset', 'register', 'unregister', 'watch', 'unwatch', 'notify', 'messages', 'sessions', 'plugins'],
-        description: 'Operation to perform.',
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['get', 'set', 'reset', 'register', 'unregister', 'watch', 'unwatch', 'notify', 'messages', 'sessions', 'plugins'],
+          description: 'Operation to perform.',
+        },
+        sessionId: {
+          type: 'string',
+          description: 'Target Session id (or, for "notify"/"messages", an id, an exact title, or a unique title fragment). Omit for get/set/watch to use the calling Session where that makes sense.',
+        },
+        scope: {
+          type: 'string',
+          enum: ['global', 'session'],
+          description: 'Layout scope for "set" and "reset"; defaults to "global".',
+        },
+        order: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Ordered action ids for "set", left to right. Ids omitted from order and hidden are removed from the layout.',
+        },
+        hidden: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Action ids that stay in the layout but render hidden; used by "set".',
+        },
+        takeover: {
+          type: 'boolean',
+          description: 'Global only: whether the bar replaces the buttons other plugins put in the row action seat; used by "set" with scope "global".',
+        },
+        id: {
+          type: 'string',
+          description: 'Action id for "register"/"unregister"; lowercase letters, digits, dot, dash, underscore.',
+        },
+        owner: {
+          type: 'string',
+          description: 'Optional package name that owns the button (for example "dsh-session-stars"); used by "register" so the settings page can show which plugins already contribute a button.',
+        },
+        zh: {
+          type: 'string',
+          description: 'Chinese label for "register".',
+        },
+        en: {
+          type: 'string',
+          description: 'English label for "register".',
+        },
+        hint: {
+          type: 'string',
+          description: 'One-line Chinese hint describing what the button does; used by "register".',
+        },
+        position: {
+          type: 'integer',
+          description: 'Default position for "register" (ascending; built-ins run 10..90, and the default layout is the todo square plus the finish alert).',
+        },
+        note: {
+          type: 'string',
+          description: 'Optional note recorded with "watch".',
+        },
+        text: {
+          type: 'string',
+          description: 'Message body for "notify" (at most 4000 characters).',
+        },
+        wake: {
+          type: 'boolean',
+          description: 'Whether "notify" wakes an idle target Session into a new turn; defaults to true so the message is visible and acted on. Pass false to queue it as context for the next step of that Session.',
+        },
+        limit: {
+          type: 'integer',
+          description: 'Maximum rows for "messages" and "sessions"; defaults to 20.',
+        },
+        with: {
+          type: 'string',
+          description: 'Only show messages exchanged with this Session id or title; used by "messages".',
+        },
       },
-      sessionId: {
-        type: 'string',
-        description: 'Target Session id (or, for "notify"/"messages", an id, an exact title, or a unique title fragment). Omit for get/set/watch to use the calling Session where that makes sense.',
-      },
-      scope: {
-        type: 'string',
-        enum: ['global', 'session'],
-        description: 'Layout scope for "set" and "reset"; defaults to "global".',
-      },
-      order: {
-        type: 'array',
-        items: { type: 'string' },
-        description: 'Ordered action ids for "set", left to right. Ids omitted from order and hidden are removed from the layout.',
-      },
-      hidden: {
-        type: 'array',
-        items: { type: 'string' },
-        description: 'Action ids that stay in the layout but render hidden; used by "set".',
-      },
-      takeover: {
-        type: 'boolean',
-        description: 'Global only: whether the bar replaces the buttons other plugins put in the row action seat; used by "set" with scope "global".',
-      },
-      id: {
-        type: 'string',
-        description: 'Action id for "register"/"unregister"; lowercase letters, digits, dot, dash, underscore.',
-      },
-      owner: {
-        type: 'string',
-        description: 'Optional package name that owns the button (for example "dsh-session-stars"); used by "register" so the settings page can show which plugins already contribute a button.',
-      },
-      zh: {
-        type: 'string',
-        description: 'Chinese label for "register".',
-      },
-      en: {
-        type: 'string',
-        description: 'English label for "register".',
-      },
-      hint: {
-        type: 'string',
-        description: 'One-line Chinese hint describing what the button does; used by "register".',
-      },
-      position: {
-        type: 'integer',
-        description: 'Default position for "register" (ascending; built-ins are 10..50).',
-      },
-      note: {
-        type: 'string',
-        description: 'Optional note recorded with "watch".',
-      },
-      text: {
-        type: 'string',
-        description: 'Message body for "notify" (at most 4000 characters).',
-      },
-      wake: {
-        type: 'boolean',
-        description: 'Whether "notify" wakes an idle target Session into a new turn; defaults to true so the message is visible and acted on. Pass false to queue it as context for the next step of that Session.',
-      },
-      limit: {
-        type: 'integer',
-        description: 'Maximum rows for "messages" and "sessions"; defaults to 20.',
-      },
-      with: {
-        type: 'string',
-        description: 'Only show messages exchanged with this Session id or title; used by "messages".',
-      },
+      required: ['action'],
     },
     output: {
       schema: { type: 'object' },

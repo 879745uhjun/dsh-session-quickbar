@@ -89,12 +89,24 @@ async function withHarness(run) {
 
 const exec = (sessionId) => ({ agent: { id: sessionId } })
 
-test('the default layout is the four everyday buttons', async () => {
+test('the tool schema is a JSON Schema object root', async () => {
+  await withHarness(async ({ tool }) => {
+    assert.equal(tool.parameters.type, 'object', 'object root')
+    assert.equal(typeof tool.parameters.properties, 'object', 'properties map')
+    assert.deepEqual(tool.parameters.required, ['action'], 'root required')
+    assert.equal(tool.parameters.action, undefined, 'no bare property table')
+    for (const [name, schema] of Object.entries(tool.parameters.properties)) {
+      assert.equal(schema.required, undefined, `${name} must not carry property-level required`)
+    }
+  })
+})
+
+test('the default layout is the todo square and the finish alert', async () => {
   await withHarness(async ({ tool }) => {
     const result = await tool.execute({ action: 'get' }, exec('session-a'))
     assert.equal(result.ok, true)
     assert.equal(result.scope, 'default')
-    assert.deepEqual(result.items.map((item) => item.id), ['star', 'todo', 'archive', 'pin'])
+    assert.deepEqual(result.items.map((item) => item.id), ['todo', 'notify'])
     assert.equal(result.takeover, true)
   })
 })

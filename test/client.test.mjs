@@ -120,7 +120,7 @@ test('the plugin exposes the registry contract other plugins adopt', () => {
   assert.ok(api)
   assert.equal(api.version, 1)
   assert.equal(typeof api.register, 'function')
-  assert.deepEqual(api.list().map((action) => action.id), ['star', 'todo', 'archive', 'pin', 'copy-id'])
+  assert.deepEqual(api.list().map((action) => action.id), ['star', 'todo', 'archive', 'pin', 'copy-id', 'notify', 'pack', 'token', 'boxes'])
 })
 
 test('the strip, the menu entry, the page, the panel entry, and the dialog are registered', () => {
@@ -130,6 +130,7 @@ test('the strip, the menu entry, the page, the panel entry, and the dialog are r
     'sidebar.workspaces.session.menu.item',
     'main',
     'sidebar.panellist',
+    'shell.overlay',
     'shell.overlay',
   ])
   const strip = registrations[0].options

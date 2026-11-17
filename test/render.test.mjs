@@ -13,7 +13,12 @@ const config = {
   version: 1,
   updatedAt: 1,
   global: { items: [], takeover: true, updatedAt: 0 },
-  sessions: {},
+  sessions: {
+    'session-adapters': {
+      items: [{ id: 'todo', visible: true }, { id: 'token', visible: true }, { id: 'boxes', visible: true }],
+      updatedAt: 1,
+    },
+  },
   actions: {
     star: { id: 'star', labels: { zh: '星标', en: 'Star' }, order: 10, source: 'builtin', ownerSession: null },
     todo: { id: 'todo', labels: { zh: '待办', en: 'Todo' }, order: 20, source: 'builtin', ownerSession: null },
@@ -84,6 +89,43 @@ globalThis.fetch = async (url, options) => {
           { name: 'dsh-session-transfer', version: '1.0.0', description: 'Pack a session', client: true },
           { name: 'dsh-whale-widget', version: '0.4.2', description: 'Balance widget', client: false },
         ],
+      }),
+    }
+  }
+  if (url === '/token-usage') {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        ok: true,
+        sessions: [{
+          sessionId: 'session-adapters',
+          total: 1234567,
+          input: 1000000,
+          output: 234567,
+          cacheRead: 0,
+          cacheWrite: 0,
+          cost: 1.23,
+          cacheHitRate: 0.9,
+          turns: 4,
+          days: [{ day: '2026-11-16', total: 100000 }],
+        }],
+      }),
+    }
+  }
+  if (url === '/session-boxes') {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        ok: true,
+        state: {
+          boxes: [
+            { id: 'b_aaa111', name: '俄语', color: 'blue', parentId: null, order: 0 },
+            { id: 'b_bbb222', name: '子盒子', color: 'amber', parentId: 'b_aaa111', order: 1 },
+          ],
+          memberships: { 'session-adapters': ['b_aaa111'] },
+        },
       }),
     }
   }
@@ -221,8 +263,8 @@ test('the strip renders every default button for a row', async () => {
   }
   walk(tree)
   const buttons = collected.filter((item) => item.tag === 'button')
-  assert.equal(buttons.length, 4)
-  assert.deepEqual(buttons.map((item) => item.props['aria-label']), ['bar.starOn', 'bar.todo', 'bar.archive', 'bar.pin'])
+  assert.equal(buttons.length, 2)
+  assert.deepEqual(buttons.map((item) => item.props['aria-label']), ['bar.todo', 'bar.notify'])
   assert.ok(buttons.every((item) => typeof item.props.title === 'string'))
   assert.ok(collected.some((item) => item.props.className === 'sq-pending'))
 })
@@ -312,4 +354,31 @@ test('the survey falls back to the loaded bundles before the host route exists',
   assert.ok(text.includes('page.pluginsRestart'))
   assert.equal(text.includes('dsh-session-quickbar'), false)
   assert.equal(text.includes('@deepseek-ai'), false)
+})
+
+
+test('token and box buttons render for a configured session', async () => {
+  const page = bySlot('sidebar.workspaces.session.row.action').component
+  const tree = page({ sessionId: 'session-adapters', displayTitle: '适配会话' })
+  const collected = []
+  const walk = (node) => {
+    if (node === null || node === undefined || typeof node === 'boolean') return
+    if (Array.isArray(node)) return node.forEach(walk)
+    if (typeof node.type === 'function') {
+      const props = { ...node.props }
+      if (node.children.length === 1) props.children = node.children[0]
+      return walk(invoke(node.type, props))
+    }
+    if (typeof node.type === 'string') {
+      collected.push({ tag: node.type, props: node.props, children: node.children })
+      node.children.forEach(walk)
+    }
+  }
+  walk(tree)
+  const buttons = collected.filter((item) => item.tag === 'button')
+  const labels = buttons.map((item) => item.props['aria-label'])
+  assert.ok(labels.includes('bar.token'), JSON.stringify(labels))
+  assert.ok(labels.includes('bar.boxesOn'), JSON.stringify(labels))
+  const token = buttons.find((item) => item.props['aria-label'] === 'bar.token')
+  assert.equal(token.children.join(''), '1.2M')
 })
