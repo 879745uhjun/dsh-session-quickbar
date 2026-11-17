@@ -141,7 +141,7 @@ window.__ModuleLoader__.load({
       'popover.noBoxes': 'No box yet — create one in the sidebar',
       'popover.clearBoxes': 'Remove from all boxes',
       'page.panels': 'Sidebar entries',
-      'page.panelsHint': 'Unchecked entries move into the sidebar\'s More menu; the others stay in the list.',
+      'page.panelsHint': 'Unchecked entries move into the sidebar\'s More menu; the others stay in the list. The host\'s own pin is session-only and shares that menu, so one entry never shows twice.',
       'page.panelsCount': '{n} entries · {hidden} in More',
       'page.panelsEmpty': 'No sidebar panel is registered right now',
       'page.panelsRestart': 'Panel preferences arrive with the next app restart; this panel list is read-only until then.',
@@ -253,7 +253,7 @@ window.__ModuleLoader__.load({
       'popover.noBoxes': '还没有盒子，先在侧边栏创建一个',
       'popover.clearBoxes': '移出全部盒子',
       'page.panels': '侧栏入口',
-      'page.panelsHint': '取消勾选的入口会收进侧栏的「更多」菜单，其余继续留在列表里。',
+      'page.panelsHint': '取消勾选的入口会收进侧栏的「更多」菜单，其余继续留在列表里。宿主自带的图钉只在本次会话有效，与这里共用同一个菜单，同一入口只显示一行。',
       'page.panelsCount': '{n} 个入口 · {hidden} 个在更多里',
       'page.panelsEmpty': '当前没有注册任何侧栏面板',
       'page.panelsRestart': '侧栏入口配置要等下次启动应用才生效；在那之前这里只读。',
@@ -2582,12 +2582,22 @@ window.__ModuleLoader__.load({
     }
 
     /** More-menu rows for the panel entries the quick bar hides. */
-    function HiddenPanelsMenu({ ctx, deps, onDismiss, renderFactorySlot }) {
+    function HiddenPanelsMenu({ ctx, deps, entries: hostEntries, onDismiss, renderFactorySlot }) {
       const state = useStore(deps.configStore)
-      const entries = usePanelEntries(ctx)
+      const panels = usePanelEntries(ctx)
       const t = useT(ctx)
       const hidden = state.config?.panels?.hidden ?? []
-      const rows = entries.filter((entry) => hidden.includes(entry.id))
+      // The host's own pin list also feeds this menu: an entry it already
+      // unpinned is listed by the shipped rows, so adding our row again would
+      // duplicate it. Only entries that are still pinned but hidden by us
+      // belong in this group.
+      const pinned = new Map()
+      for (const entry of Array.isArray(hostEntries) ? hostEntries : []) {
+        if (entry !== null && typeof entry === 'object' && typeof entry.id === 'string') {
+          pinned.set(entry.id, entry.pinned !== false)
+        }
+      }
+      const rows = panels.filter((entry) => hidden.includes(entry.id) && pinned.get(entry.id) !== false)
       if (rows.length === 0) return null
       const layout = readService(ctx, 'layout')
       return h(React.Fragment, null,
