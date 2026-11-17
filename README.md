@@ -69,3 +69,11 @@ The full contract, including the Host tool and the migration steps for a plugin 
 - Channel targets resolve by exact Session id, exact title, or a unique title fragment. Titles are reported by the browser half when the settings page is open; without that, pass the exact id.
 - Messages for a Session that is not loaded stay queued until it starts; they are then injected in order and wake it once, so the request is visible in its conversation. The settings page lists them under **Session channel → Waiting for delivery**, and a queued Session row carries an amber count; a `notify` also wakes a loaded idle Session by default (`wake: false` queues silently), while layout change notices never wake one.
 - Touch layouts keep the host's rule that only the pin action stays visible; the strip follows that rule.
+
+## Install from GitHub
+
+```sh
+dsh plugin --profile desktop add github:879745uhjun/dsh-session-quickbar
+```
+
+Reload the Web UI page after installing.

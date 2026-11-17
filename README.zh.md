@@ -67,3 +67,11 @@ const dispose = window.dshSessionQuickbar.register({
 - 通道目标支持精确会话 id、精确标题、唯一标题片段。标题由浏览器端在设置页打开时上报；没上报过就传精确 id。
 - 目标会话没加载时，消息排队，等它启动后按顺序注入，并用最后一条显式消息唤醒一次，所以请求会出现在它的对话里。设置页「会话通道 → 待投递」能看到队列，排队中的会话行带一个琥珀色计数；`notify` 对已加载的空闲会话默认也会唤醒（`wake: false` 只静默排队），布局变更通知从不唤醒。
 - 触屏布局沿用宿主规则：只保留置顶按钮，快捷栏同样遵循。
+
+## 从 GitHub 安装
+
+```sh
+dsh plugin --profile desktop add github:879745uhjun/dsh-session-quickbar
+```
+
+装好后刷新 Web 页面。
