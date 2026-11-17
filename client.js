@@ -104,6 +104,9 @@ window.__ModuleLoader__.load({
       'page.pluginCandidate': 'Available',
       'page.pluginInactive': 'Not loaded',
       'page.messagesCount': '{n} total',
+      'page.expand': 'Show',
+      'page.collapse': 'Hide',
+      'page.messagesCollapsed': '{n} messages folded',
       'page.unavailable': 'Its plugin is not installed',
       'page.count': '{n} buttons',
       'bar.star': 'Star',
@@ -137,6 +140,15 @@ window.__ModuleLoader__.load({
       'popover.boxesTitle': 'Move into a box',
       'popover.noBoxes': 'No box yet — create one in the sidebar',
       'popover.clearBoxes': 'Remove from all boxes',
+      'page.panels': 'Sidebar entries',
+      'page.panelsHint': 'Unchecked entries move into the sidebar\'s More menu; the others stay in the list.',
+      'page.panelsCount': '{n} entries · {hidden} in More',
+      'page.panelsEmpty': 'No sidebar panel is registered right now',
+      'page.panelsRestart': 'Panel preferences arrive with the next app restart; this panel list is read-only until then.',
+      'page.panelShow': 'Show this entry again',
+      'page.panelHide': 'Move this entry into More',
+      'page.panelHidden': 'In More',
+      'menu.panelOpen': 'Open {name}',
       'bar.settings': 'Quick bar settings',
       'bar.pending': '{n} messages are queued until this session starts',
       'menu.label': 'Quick bar…',
@@ -204,6 +216,9 @@ window.__ModuleLoader__.load({
       'page.pluginCandidate': '可接入',
       'page.pluginInactive': '未启用',
       'page.messagesCount': '共 {n} 条',
+      'page.expand': '展开',
+      'page.collapse': '收起',
+      'page.messagesCollapsed': '{n} 条消息已折叠',
       'page.unavailable': '所属插件未安装',
       'page.count': '{n} 个按钮',
       'bar.star': '星标',
@@ -237,6 +252,15 @@ window.__ModuleLoader__.load({
       'popover.boxesTitle': '移入分组盒子',
       'popover.noBoxes': '还没有盒子，先在侧边栏创建一个',
       'popover.clearBoxes': '移出全部盒子',
+      'page.panels': '侧栏入口',
+      'page.panelsHint': '取消勾选的入口会收进侧栏的「更多」菜单，其余继续留在列表里。',
+      'page.panelsCount': '{n} 个入口 · {hidden} 个在更多里',
+      'page.panelsEmpty': '当前没有注册任何侧栏面板',
+      'page.panelsRestart': '侧栏入口配置要等下次启动应用才生效；在那之前这里只读。',
+      'page.panelShow': '重新显示这个入口',
+      'page.panelHide': '把这个入口收进「更多」',
+      'page.panelHidden': '已在更多',
+      'menu.panelOpen': '打开 {name}',
       'bar.settings': '快捷栏设置',
       'bar.pending': '有 {n} 条消息排队，等这个会话启动后送达',
       'menu.label': '快捷栏设置…',
@@ -255,6 +279,8 @@ window.__ModuleLoader__.load({
      * ------------------------------------------------------------------ */
 
     const CSS = [
+      ':root{--sq-shadow:color-mix(in srgb,#000 18%,transparent);--sq-backdrop:color-mix(in srgb,#000 24%,transparent)}',
+      'body[data-ds-dark-theme]{--sq-shadow:color-mix(in srgb,#000 30%,transparent);--sq-backdrop:color-mix(in srgb,#000 36%,transparent)}',
       '.sq-bar{display:inline-flex;align-items:center;gap:4px;flex:none}',
       '.sq-token{width:auto;min-width:22px;padding:0 5px;font-size:10px;font-variant-numeric:tabular-nums}',
       '.sq-boxbtn{gap:2px}',
@@ -270,7 +296,7 @@ window.__ModuleLoader__.load({
       '.sq-boxcount{font-size:9px;line-height:1;font-variant-numeric:tabular-nums}',
       '.sq-popover{position:fixed;z-index:62;box-sizing:border-box;padding:12px 14px;border-radius:12px;',
       'background:var(--dsw-alias-bg-layer-1);border:.5px solid var(--dsw-alias-border-l2);',
-      'box-shadow:0 14px 40px color-mix(in srgb,#000 30%,transparent);display:flex;flex-direction:column;gap:10px}',
+      'box-shadow:0 14px 40px var(--sq-shadow);display:flex;flex-direction:column;gap:10px}',
       '.sq-popover-body{display:flex;flex-direction:column;gap:10px}',
       '.sq-popover-head{font-size:12px;line-height:17px;font-weight:600;overflow:hidden;',
       'text-overflow:ellipsis;white-space:nowrap}',
@@ -389,6 +415,7 @@ window.__ModuleLoader__.load({
       'padding:6px 10px;border:0;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;',
       'font-size:13px;line-height:18px;text-align:left;border-radius:var(--dsw-radius-sm,6px);cursor:pointer}',
       '.sq-menu-item:hover{background:var(--dsw-alias-interactive-bg-hover)}',
+      '.sq-menu-sep{height:.5px;margin:4px 8px;background:var(--dsw-alias-border-l2)}',
       '.sq-menu-item:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:-2px}',
       '.sq-menu-item .sq-row-label{display:block;flex:1;min-width:0}',
       '.sq-badge{flex:none;font-size:10px;line-height:16px;padding:0 6px;border-radius:999px;',
@@ -406,11 +433,11 @@ window.__ModuleLoader__.load({
       '.sq-footer{display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap}',
       '.sq-state{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}',
       '.sq-state[data-error=true]{color:var(--dsw-alias-state-error-primary)}',
-      '.sq-backdrop{position:fixed;inset:0;z-index:60;background:color-mix(in srgb,#000 36%,transparent)}',
+      '.sq-backdrop{position:fixed;inset:0;z-index:60;background:var(--sq-backdrop)}',
       '.sq-dialog{position:fixed;z-index:61;left:50%;top:50%;transform:translate(-50%,-50%);',
       'box-sizing:border-box;width:min(420px,calc(100vw - 40px));padding:18px 20px;border-radius:14px;',
       'background:var(--dsw-alias-bg-layer-1);border:.5px solid var(--dsw-alias-border-l2);',
-      'box-shadow:0 18px 50px color-mix(in srgb,#000 32%,transparent);display:flex;flex-direction:column;gap:10px}',
+      'box-shadow:0 18px 50px var(--sq-shadow);display:flex;flex-direction:column;gap:10px}',
       '.sq-dialog h2{margin:0;font-size:15px;line-height:22px}',
       '.sq-dialog p{margin:0;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary)}',
       '.sq-dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:6px}',
@@ -588,6 +615,50 @@ window.__ModuleLoader__.load({
       return String(raw).toLowerCase().startsWith('zh') ? 'zh' : 'en'
     }
 
+    /** The sidebar's panel entries in display order. */
+    function panelEntryList(ctx) {
+      let entries = []
+      try {
+        entries = typeof ctx.slots?.entriesOfSlot === 'function' ? ctx.slots.entriesOfSlot('sidebar.panellist') : []
+      } catch {
+        entries = []
+      }
+      const rows = []
+      for (const entry of Array.isArray(entries) ? entries : []) {
+        const options = entry !== null && entry !== undefined && typeof entry === 'object' ? entry.options ?? {} : {}
+        const id = typeof options.id === 'string' && options.id !== '' ? options.id : null
+        if (id === null) continue
+        let label = options.label
+        if (typeof label === 'function') {
+          try {
+            label = label()
+          } catch {
+            label = id
+          }
+        }
+        if (typeof label !== 'string' || label.trim() === '') label = id
+        rows.push({ id, label: label.trim(), order: Number(options.order) || 0 })
+      }
+      return rows.sort((left, right) => left.order - right.order)
+    }
+
+    /** Live panel entries for the settings page and the More menu. */
+    function usePanelEntries(ctx) {
+      const [rows, setRows] = useState(() => panelEntryList(ctx))
+      const locale = ctx.locale ?? readService(ctx, 'locale')
+      useLocaleRevision(locale)
+      useEffect(() => {
+        const read = () => setRows(panelEntryList(ctx))
+        read()
+        try {
+          return ctx.slots.subscribe('sidebar.panellist', read)
+        } catch {
+          return undefined
+        }
+      }, [ctx])
+      return rows
+    }
+
     /* ------------------------------------------------------------------ *
      * Icons (16×16, currentColor)
      * ------------------------------------------------------------------ */
@@ -683,6 +754,7 @@ window.__ModuleLoader__.load({
         updatedAt: 0,
         global: { items: [], takeover: true, updatedAt: 0 },
         sessions: {},
+        panels: { hidden: [] },
         actions: {},
         subscriptions: {},
         knownSessions: {},
@@ -702,6 +774,10 @@ window.__ModuleLoader__.load({
         : []
       doc.global.takeover = global.takeover !== false
       doc.global.updatedAt = Number(global.updatedAt) || 0
+      const panels = raw.panels ?? {}
+      doc.panels.hidden = Array.isArray(panels.hidden)
+        ? panels.hidden.filter((id) => typeof id === 'string' && id.length > 0)
+        : []
       if (raw.sessions !== null && typeof raw.sessions === 'object') {
         for (const [sessionId, value] of Object.entries(raw.sessions)) {
           if (value === null || typeof value !== 'object' || !Array.isArray(value.items)) continue
@@ -722,14 +798,14 @@ window.__ModuleLoader__.load({
     }
 
     function createConfigStore() {
-      let state = { status: 'loading', config: null, error: null, saving: false }
+      let state = { status: 'loading', config: null, error: null, saving: false, supportsPanels: false }
       const listeners = new Set()
       let inflight = null
       let chain = Promise.resolve()
       let warned = false
 
       function publish(next) {
-        state = next
+        state = { ...state, ...next }
         for (const listener of listeners) listener()
       }
 
@@ -740,7 +816,7 @@ window.__ModuleLoader__.load({
       }
 
       function applyServer(raw) {
-        publish({ status: 'ready', config: normalizeDoc(raw), error: null, saving: state.saving })
+        publish({ status: 'ready', config: normalizeDoc(raw), error: null, saving: state.saving, supportsPanels: raw !== null && typeof raw === 'object' && raw.panels !== undefined })
       }
 
       function refresh() {
@@ -812,7 +888,7 @@ window.__ModuleLoader__.load({
       let warned = false
 
       function publish(next) {
-        state = next
+        state = { ...state, ...next }
         for (const listener of listeners) listener()
       }
 
@@ -886,7 +962,7 @@ window.__ModuleLoader__.load({
       let warned = false
 
       function publish(next) {
-        state = next
+        state = { ...state, ...next }
         for (const listener of listeners) listener()
       }
 
@@ -968,7 +1044,7 @@ window.__ModuleLoader__.load({
       let warned = false
 
       function publish(next) {
-        state = next
+        state = { ...state, ...next }
         for (const listener of listeners) listener()
       }
 
@@ -1170,7 +1246,7 @@ window.__ModuleLoader__.load({
       let warned = false
 
       function publish(next) {
-        state = next
+        state = { ...state, ...next }
         for (const listener of listeners) listener()
       }
 
@@ -1232,7 +1308,7 @@ window.__ModuleLoader__.load({
       let warned = false
 
       function publish(next) {
-        state = next
+        state = { ...state, ...next }
         for (const listener of listeners) listener()
       }
 
@@ -2005,12 +2081,20 @@ window.__ModuleLoader__.load({
       const registryState = useStore(registry.versionStore)
       const intent = useStore(panelIntent)
       const catalog = useCatalog(ctx)
+      const panelRows = usePanelEntries(ctx)
       const t = useT(ctx)
       const language = languageOf()
       const [scope, setScope] = useState('global')
       const [selected, setSelected] = useState(null)
       const [search, setSearch] = useState('')
       const [pluginScan, setPluginScan] = useState({ status: 'idle', rows: [], error: null })
+      const [messagesOpen, setMessagesOpen] = useState(() => {
+        try {
+          return window.localStorage.getItem('dsh-session-quickbar:messages') === '1'
+        } catch {
+          return false
+        }
+      })
       const scanPlugins = useCallback(async () => {
         setPluginScan((current) => ({ ...current, status: 'loading' }))
         try {
@@ -2073,6 +2157,7 @@ window.__ModuleLoader__.load({
       }, [catalog])
 
       const config = state.config
+      const hiddenPanels = config?.panels?.hidden ?? []
       const sessionEntry = config === null || selected === null ? undefined : config.sessions[selected]
       const baseItems = useMemo(() => {
         if (config === null) return []
@@ -2150,6 +2235,27 @@ window.__ModuleLoader__.load({
         const [moved] = ordered.splice(from, 1)
         ordered.splice(to, 0, moved)
         writeItems(ordered)
+      }
+
+      const toggleMessages = () => {
+        setMessagesOpen((open) => {
+          const next = !open
+          try {
+            window.localStorage.setItem('dsh-session-quickbar:messages', next ? '1' : '0')
+          } catch {
+            /* storage can be unavailable; the toggle still works this session */
+          }
+          return next
+        })
+      }
+
+      const writePanels = useCallback((hidden) => {
+        void configStore.write({ action: 'panels', hidden }, (doc) => ({ ...doc, panels: { ...doc.panels, hidden } }))
+      }, [configStore])
+
+      const togglePanel = (id) => {
+        const next = hiddenPanels.includes(id) ? hiddenPanels.filter((entry) => entry !== id) : [...hiddenPanels, id]
+        writePanels(next)
       }
 
       const resetScope = () => {
@@ -2349,6 +2455,30 @@ window.__ModuleLoader__.load({
               }, state.error !== null ? t('page.error') : state.saving ? t('page.saving') : t('page.saved')))),
           h('div', { className: 'sq-card' },
             h('div', { className: 'sq-cardhead' },
+              h('h2', { className: 'sq-cardtitle' }, t('page.panels')),
+              h('span', { className: 'sq-note' }, t('page.panelsCount', { n: panelRows.length, hidden: hiddenPanels.length }))),
+            h('p', { className: 'sq-note' }, t('page.panelsHint')),
+            state.supportsPanels !== true
+              ? h('p', { className: 'sq-note' }, t('page.panelsRestart'))
+              : panelRows.length === 0
+              ? h('p', { className: 'sq-note' }, t('page.panelsEmpty'))
+              : h('div', { className: 'sq-rows' }, panelRows.map((row) => {
+                const shown = !hiddenPanels.includes(row.id)
+                return h('div', { key: row.id, className: 'sq-row', 'data-hidden': shown ? undefined : 'true' },
+                  h('button', {
+                    type: 'button',
+                    role: 'checkbox',
+                    className: 'sq-check',
+                    'aria-checked': shown,
+                    'aria-label': shown ? t('page.panelHide') : t('page.panelShow'),
+                    title: shown ? t('page.panelHide') : t('page.panelShow'),
+                    onClick: () => togglePanel(row.id),
+                  }, shown ? h(IconCheck) : null),
+                  h('span', { className: 'sq-row-label' }, h('span', { className: 'sq-row-name' }, row.label)),
+                  shown ? null : h('span', { className: 'sq-tag' }, t('page.panelHidden')))
+              }))),
+          h('div', { className: 'sq-card' },
+            h('div', { className: 'sq-cardhead' },
               h('h2', { className: 'sq-cardtitle' }, t('page.plugins')),
               h('div', { className: 'sq-toolbar' },
                 h('span', { className: 'sq-note' }, t('page.pluginsCount', { n: pluginRows.length })),
@@ -2400,10 +2530,18 @@ window.__ModuleLoader__.load({
                   h('span', { className: 'sq-row-hint' }, (value.note ?? '') === '' ? timeText(value.since) : value.note))))),
             h('div', { className: 'sq-cardhead' },
               h('h3', { className: 'sq-cardtitle' }, t('page.messages')),
-              h('span', { className: 'sq-note' }, t('page.messagesCount', { n: config.messages.length }))),
-            messages.length === 0
-              ? h('p', { className: 'sq-note' }, t('page.noMessages'))
-              : messages.map((message) => h('div', { key: message.id, className: 'sq-message' },
+              h('div', { className: 'sq-toolbar' },
+                h('span', { className: 'sq-note' }, t('page.messagesCount', { n: config.messages.length })),
+                h('button', {
+                  type: 'button',
+                  className: 'sq-btn-ghost',
+                  'aria-expanded': messagesOpen,
+                  onClick: toggleMessages,
+                }, messagesOpen ? t('page.collapse') : t('page.expand')))),
+            messagesOpen
+              ? (messages.length === 0
+                ? h('p', { className: 'sq-note' }, t('page.noMessages'))
+                : messages.map((message) => h('div', { key: message.id, className: 'sq-message' },
                 h('div', { className: 'sq-message-meta' },
                   h('span', null, sessionTitle(message.from)),
                   h('span', null, '→'),
@@ -2413,7 +2551,8 @@ window.__ModuleLoader__.load({
                     'data-state': message.deliveredAt === 0 ? 'queued' : 'delivered',
                     title: message.deliveredAt === 0 ? t('page.pendingHint') : t('page.delivered', { time: timeText(message.deliveredAt) }),
                   }, message.deliveredAt === 0 ? t('page.queued') : '✓')),
-                h('div', { className: 'sq-message-text' }, message.text))),
+                h('div', { className: 'sq-message-text' }, message.text))))
+              : h('p', { className: 'sq-note' }, t('page.messagesCollapsed', { n: config.messages.length })),
             h('p', { className: 'sq-note' }, t('page.live')))))
     }
 
@@ -2440,6 +2579,40 @@ window.__ModuleLoader__.load({
         },
       }, h('span', { className: 'sq-row-icon' }, h(IconSliders)), h('span', { className: 'sq-row-label' },
         h('span', { className: 'sq-row-name' }, t('menu.label'))))
+    }
+
+    /** More-menu rows for the panel entries the quick bar hides. */
+    function HiddenPanelsMenu({ ctx, deps, onDismiss, renderFactorySlot }) {
+      const state = useStore(deps.configStore)
+      const entries = usePanelEntries(ctx)
+      const t = useT(ctx)
+      const hidden = state.config?.panels?.hidden ?? []
+      const rows = entries.filter((entry) => hidden.includes(entry.id))
+      if (rows.length === 0) return null
+      const layout = readService(ctx, 'layout')
+      return h(React.Fragment, null,
+        h('div', { className: 'sq-menu-sep', role: 'separator' }),
+        rows.map((row) => h('button', {
+          key: row.id,
+          type: 'button',
+          role: 'menuitem',
+          className: 'sq-menu-item',
+          title: t('menu.panelOpen', { name: row.label }),
+          onClick: (event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            try {
+              layout?.selectPanel?.(row.id)
+            } catch (error) {
+              console.warn('[session-quickbar] could not open the panel:', error)
+            }
+            if (typeof onDismiss === 'function') onDismiss()
+          },
+        },
+          h('span', { className: 'sq-menu-icon' }, typeof renderFactorySlot === 'function'
+            ? renderFactorySlot('sidebar.panel.icon', { id: row.id, size: 16, active: false })
+            : null),
+          h('span', { className: 'sq-row-name' }, row.label))))
     }
 
     /** The archive confirmation dialog behind the bar's archive button. */
@@ -2543,6 +2716,46 @@ window.__ModuleLoader__.load({
         }, 'session-quickbar: styles')
 
         ctx.effect(() => ctx.locale.register(NS, LOCALES), 'session-quickbar: dictionaries')
+
+        // Hiding one panel row keeps the host's row, its icon, and its active
+        // state intact; the row is only painted away. Every hidden row reappears
+        // in the More menu below, so nothing becomes unreachable.
+        ctx.effect(() => {
+          const style = document.createElement('style')
+          style.setAttribute('data-plugin-css', 'dsh-session-quickbar/Panels.css')
+          document.head.appendChild(style)
+          const render = () => {
+            const doc = configStore.getSnapshot().config
+            const hidden = doc?.panels?.hidden ?? []
+            const labels = new Map(panelEntryList(ctx).map((row) => [row.id, row.label]))
+            const rules = []
+            for (const id of hidden) {
+              const label = labels.get(id)
+              if (label === undefined) continue
+              const escaped = label.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+              rules.push('[data-sidebar-scrollport] nav > div:has(button[aria-label="' + escaped + '"]){display:none!important}')
+            }
+            style.textContent = rules.join('\n')
+          }
+          const unsubscribeConfig = configStore.subscribe(render)
+          const locale = ctx.locale ?? readService(ctx, 'locale')
+          const unsubscribeLocale = locale !== undefined && typeof locale.subscribe === 'function'
+            ? locale.subscribe(render)
+            : () => {}
+          let unsubscribeSlots = () => {}
+          try {
+            unsubscribeSlots = ctx.slots.subscribe('sidebar.panellist', render)
+          } catch {
+            unsubscribeSlots = () => {}
+          }
+          render()
+          return () => {
+            unsubscribeSlots()
+            unsubscribeLocale()
+            unsubscribeConfig()
+            style.remove()
+          }
+        }, 'session-quickbar: hidden panel rows')
 
         ctx.effect(() => {
           const refresh = () => {
@@ -2688,6 +2901,14 @@ window.__ModuleLoader__.load({
           order: 61,
           locale: NS,
         }, Popover))
+        const HiddenPanels = (props) => h(HiddenPanelsMenu, { ...props, deps, ctx })
+        ctx.slots.inject('sidebar.panellist.actions', () => ctx.slots.register({
+          name: 'sidebar.panellist.actions',
+          id: 'session-quickbar-hidden-panels',
+          order: 1,
+          locale: NS,
+        }, HiddenPanels))
+
       },
     }
   },

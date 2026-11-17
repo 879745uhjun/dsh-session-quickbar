@@ -357,6 +357,7 @@ function normalizeDoc(raw) {
     updatedAt: toTimestamp(raw?.updatedAt),
     global: { items: [], takeover: true, updatedAt: 0 },
     sessions: {},
+    panels: { hidden: [] },
     actions: builtinRegistry(),
     subscriptions: {},
     knownSessions: {},
@@ -368,6 +369,16 @@ function normalizeDoc(raw) {
     doc.global.items = normalizeItems(globalRaw.items)
     doc.global.takeover = globalRaw.takeover !== false
     doc.global.updatedAt = toTimestamp(globalRaw.updatedAt)
+  }
+  const panelsRaw = raw?.panels
+  if (panelsRaw !== null && typeof panelsRaw === 'object' && Array.isArray(panelsRaw.hidden)) {
+    const seen = new Set()
+    for (const value of panelsRaw.hidden.slice(0, MAX_ITEMS)) {
+      const id = normalizeId(value)
+      if (id === null || seen.has(id)) continue
+      seen.add(id)
+      doc.panels.hidden.push(id)
+    }
   }
   const sessionsRaw = raw?.sessions
   if (sessionsRaw !== null && typeof sessionsRaw === 'object' && !Array.isArray(sessionsRaw)) {
@@ -650,6 +661,29 @@ function createStore(file, log) {
       return { ok: true }
     },
 
+    /** Replace the hidden sidebar panel entries. */
+    async setPanels(hidden, by) {
+      await load()
+      const next = []
+      const seen = new Set()
+      for (const value of Array.isArray(hidden) ? hidden.slice(0, MAX_ITEMS) : []) {
+        const id = normalizeId(value)
+        if (id === null || seen.has(id)) continue
+        seen.add(id)
+        next.push(id)
+      }
+      doc.panels.hidden = next
+      record({
+        at: Date.now(),
+        by,
+        scope: 'global',
+        sessionId: null,
+        summary: '面板入口收进「更多」：' + (next.length === 0 ? '无' : next.join('、')),
+      })
+      await persist()
+      emit({ kind: 'panels', hidden: next, by })
+    },
+
     /** Subscribe a Session to layout changes. */
     async watch(sessionId, note) {
       await load()
@@ -852,6 +886,20 @@ function readMutation(payload) {
     const id = normalizeId(payload.id)
     if (id === null) return { ok: false, error: 'id must be a valid action id' }
     return { ok: true, mutation: { action, id } }
+  }
+  if (action === 'panels') {
+    if (!Array.isArray(payload.hidden)) return { ok: false, error: 'hidden must be an array' }
+    if (payload.hidden.length > MAX_ITEMS) return { ok: false, error: 'hidden holds at most ' + MAX_ITEMS + ' entries' }
+    const hidden = []
+    const seen = new Set()
+    for (const value of payload.hidden) {
+      const id = normalizeId(value)
+      if (id === null) return { ok: false, error: 'every hidden entry needs a valid panel id' }
+      if (seen.has(id)) continue
+      seen.add(id)
+      hidden.push(id)
+    }
+    return { ok: true, mutation: { action, hidden } }
   }
   if (action === 'catalog') {
     if (!Array.isArray(payload.rows)) return { ok: false, error: 'rows must be an array' }
@@ -1544,6 +1592,10 @@ export function apply(ctx) {
         }
         if (mutation.action === 'unregister-action') {
           await store.unregisterAction(mutation.id, 'user')
+          return
+        }
+        if (mutation.action === 'panels') {
+          await store.setPanels(mutation.hidden, 'user')
           return
         }
         if (mutation.action === 'catalog') {

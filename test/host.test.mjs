@@ -368,3 +368,38 @@ test('the plugin survey reads profile manifests and keeps client bundles', async
     await rm(home, { recursive: true, force: true })
   }
 })
+
+test('the panel visibility list is stored and returned', async () => {
+  await withHarness(async ({ tool, routes, store }) => {
+    void tool
+    void store
+    const handler = routes.get('/session-quickbar')
+    const server = createServer((request, response) => { void handler(request, response) })
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const { port } = server.address()
+    const base = 'http://127.0.0.1:' + port
+    try {
+      const posted = await fetch(base + '/session-quickbar', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'panels', hidden: ['todos', 'plugins', 'todos'] }),
+      })
+      const body = await posted.json()
+      assert.equal(posted.status, 200)
+      assert.deepEqual(body.config.panels.hidden, ['todos', 'plugins'])
+
+      const invalid = await fetch(base + '/session-quickbar', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'panels', hidden: ['bad id'] }),
+      })
+      assert.equal(invalid.status, 400)
+
+      const read = await fetch(base + '/session-quickbar')
+      const readBody = await read.json()
+      assert.deepEqual(readBody.config.panels.hidden, ['todos', 'plugins'])
+    } finally {
+      await new Promise((resolve) => server.close(resolve))
+    }
+  })
+})

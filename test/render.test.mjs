@@ -279,11 +279,37 @@ test('the settings page renders the global layout, takeover switch, and channel 
   assert.ok(text.includes('page.global'))
   assert.ok(text.includes('page.takeover'))
   assert.ok(text.includes('星标插件会话'))
-  assert.ok(text.includes('快捷栏开发会话'))
-  assert.ok(text.includes('按钮已登记'))
+  // Recent messages start folded; only their count is shown.
+  assert.ok(text.includes('page.messagesCollapsed'))
+  assert.equal(text.includes('按钮已登记'), false)
+
+  // Expanding through the toggle reveals the log.
+  let toggle = null
+  const findToggle = (node) => {
+    if (toggle !== null || node === null || node === undefined || typeof node === 'boolean') return
+    if (Array.isArray(node)) { node.forEach(findToggle); return }
+    if (typeof node.type === 'function') {
+      const props = { ...node.props }
+      if (node.children.length === 1) props.children = node.children[0]
+      return findToggle(invoke(node.type, props))
+    }
+    if (typeof node.type !== 'string') return
+    if (node.type === 'button' && node.props.className === 'sq-btn-ghost' && node.props['aria-expanded'] === false) {
+      toggle = node
+      return
+    }
+    node.children.forEach(findToggle)
+  }
+  findToggle(page({}))
+  assert.ok(toggle, 'the fold toggle renders')
+  toggle.props.onClick()
+  const expanded = render(page({}))
+  assert.ok(expanded.includes('按钮已登记'))
+  assert.ok(expanded.includes('快捷栏开发会话'))
+  assert.ok(expanded.includes('page.queued'))
+  assert.ok(expanded.includes('page.collapse'))
   assert.ok(text.includes('page.pending'))
   assert.ok(text.includes('page.pendingBadge'))
-  assert.ok(text.includes('page.queued'))
   assert.ok(text.includes('page.plugins'))
   assert.ok(text.includes('dsh-session-transfer'))
   assert.ok(text.includes('dsh-session-stars · 1.1.1'))

@@ -26,15 +26,18 @@ globalThis.document = {
   documentElement: { lang: 'zh-CN' },
   visibilityState: 'visible',
   head: {
-    appendChild(node) { globalThis.window.__lastStyle = node.textContent },
+    appendChild(node) {
+      globalThis.window.__styles = globalThis.window.__styles ?? {}
+      globalThis.window.__styles[node.pluginCss ?? 'anonymous'] = node.textContent
+    },
     removeChild() {},
   },
   createElement() {
-    return {
-      setAttribute() {},
-      remove() {},
-      textContent: '',
+    const node = { pluginCss: '', textContent: '', remove() {} }
+    node.setAttribute = (name, value) => {
+      if (name === 'data-plugin-css') node.pluginCss = value
     }
+    return node
   },
   addEventListener() {},
   removeEventListener() {},
@@ -132,6 +135,7 @@ test('the strip, the menu entry, the page, the panel entry, and the dialog are r
     'sidebar.panellist',
     'shell.overlay',
     'shell.overlay',
+    'sidebar.panellist.actions',
   ])
   const strip = registrations[0].options
   assert.equal(strip.order, 40)
@@ -142,10 +146,21 @@ test('the strip, the menu entry, the page, the panel entry, and the dialog are r
 })
 
 test('takeover targets only the seat that holds the bar and marks its own node', () => {
-  const css = globalThis.window.__lastStyle ?? ''
+  const css = (globalThis.window.__styles ?? {})['dsh-session-quickbar/QuickBar.css'] ?? ''
   assert.ok(css.includes('[data-slot="sidebar.workspaces.session.row.action"]:has(> [data-dsh-quickbar]:not([data-sq-keep]))'))
   assert.ok(css.includes('display:none!important'))
   assert.ok(css.includes('.sq-bar{'))
+})
+
+test('overlay shadows and the backdrop come from theme variables', () => {
+  const css = (globalThis.window.__styles ?? {})['dsh-session-quickbar/QuickBar.css'] ?? ''
+  assert.ok(css.includes(':root{--sq-shadow:'), 'light shadow variable')
+  assert.ok(css.includes('body[data-ds-dark-theme]{--sq-shadow:'), 'dark shadow override')
+  assert.ok(css.includes('var(--sq-shadow)'), 'shadow usage')
+  assert.ok(css.includes('var(--sq-backdrop)'), 'backdrop usage')
+  const bare = css.split('\n').filter((line) => !line.includes('--sq-shadow') && !line.includes('--sq-backdrop'))
+  assert.equal(bare.join('\n').includes('#000'), false, 'no bare #000 outside the variable definitions')
+  assert.equal(css.includes('prefers-color-scheme'), false, 'the theme attribute decides, not the OS scheme')
 })
 
 test('an external plugin can register a button, and the Host hears about it', () => {
