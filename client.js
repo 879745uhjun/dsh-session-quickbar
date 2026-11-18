@@ -2250,7 +2250,7 @@ window.__ModuleLoader__.load({
       const language = languageOf()
       if (state.config === null) return null
       const entries = resolveEntries({ config: state.config, sessionId, registry, ratings: ratings.getSnapshot(), todos: todos.getSnapshot(), notify: notify.getSnapshot(), token: token.getSnapshot(), boxes: boxes.getSnapshot(), language })
-      const pendingCount = state.config.messages.filter((message) => message.to === sessionId && message.deliveredAt === 0).length
+      const pendingCount = state.config.messages.filter((message) => message.to === sessionId && message.deliveredAt === 0 && (message.abandonedAt ?? 0) === 0).length
       if (entries.length === 0 && pendingCount === 0) return null
       const takeover = state.config.global.takeover !== false
       return h('div', {
@@ -2616,7 +2616,7 @@ window.__ModuleLoader__.load({
       const subscriptions = Object.entries(config.subscriptions)
       const pendingBySession = new Map()
       for (const message of config.messages) {
-        if (message.deliveredAt !== 0) continue
+        if (message.deliveredAt !== 0 || (message.abandonedAt ?? 0) !== 0) continue
         const entry = pendingBySession.get(message.to)
         if (entry === undefined) pendingBySession.set(message.to, { sessionId: message.to, count: 1, oldestAt: message.at })
         else {

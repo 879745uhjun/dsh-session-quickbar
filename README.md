@@ -79,6 +79,7 @@ Open **Settings → Plugins**, pick this plugin, and its detail page shows a **�
 - The strip only controls its own seat. Other rows, the row menu, and the conversation header are untouched.
 - The bar cannot call another plugin's React code except through the registry; an unmigrated plugin's button is hidden by takeover rather than adopted.
 - Channel targets resolve by exact Session id, exact title, or a unique title fragment. Titles are reported by the browser half when the settings page is open; without that, pass the exact id.
+- Queued messages are retried when the Session starts and by a 15-second sweep; each message gets at most three attempts with doubling backoff, and an abandoned message stays visible through `session_quickbar action=messages state=pending`.
 - Messages for a Session that is not loaded stay queued until it starts; they are then injected in order and wake it once, so the request is visible in its conversation. The settings page lists them under **Session channel → Waiting for delivery**, and a queued Session row carries an amber count; a `notify` also wakes a loaded idle Session by default (`wake: false` queues silently), while layout change notices never wake one.
 - Touch layouts keep the host's rule that only the pin action stays visible; the strip follows that rule.
 

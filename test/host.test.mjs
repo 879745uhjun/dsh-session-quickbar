@@ -403,3 +403,123 @@ test('the panel visibility list is stored and returned', async () => {
     }
   })
 })
+
+
+test('a queued message is delivered exactly once when its session loads', async () => {
+  await withHarness(async ({ tool, listeners }) => {
+    const queued = await tool.execute({ action: 'notify', sessionId: 'session-once', text: '只投一次' }, exec('session-user'))
+    assert.equal(queued.delivered, false)
+    const agent = createAgent('session-once')
+    listeners.get('agent/created')({ agent })
+    await new Promise((resolve) => setTimeout(resolve, 40))
+    listeners.get('agent/created')({ agent })
+    await new Promise((resolve) => setTimeout(resolve, 40))
+    assert.equal(agent.injected.length, 1)
+    const messages = await tool.execute({ action: 'messages', with: 'session-once' }, exec('session-user'))
+    assert.equal(messages.messages[0].delivered, true)
+  })
+})
+
+test('a failed delivery retries after the backoff and then succeeds', async () => {
+  await withHarness(async ({ tool, listeners }) => {
+    await tool.execute({ action: 'notify', sessionId: 'session-retry', text: '重试一次' }, exec('session-user'))
+    let failures = 1
+    const injected = []
+    const fail = () => {
+      if (failures === 0) return false
+      failures -= 1
+      throw new Error('boom')
+    }
+    const agent = {
+      id: 'session-retry',
+      inject(message) { if (fail()) return; injected.push(message) },
+      followup(message) { if (fail()) return; injected.push(message) },
+    }
+    listeners.get('agent/created')({ agent })
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    assert.equal(injected.length, 0)
+    let messages = await tool.execute({ action: 'messages', with: 'session-retry', state: 'pending' }, exec('session-user'))
+    assert.equal(messages.messages[0].attempts, 1)
+    await new Promise((resolve) => setTimeout(resolve, 2200))
+    listeners.get('agent/created')({ agent })
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    assert.equal(injected.length, 1)
+    messages = await tool.execute({ action: 'messages', with: 'session-retry' }, exec('session-user'))
+    assert.equal(messages.messages[0].delivered, true)
+  })
+})
+
+test('a message is abandoned after three failed attempts', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'session-quickbar-abandon-'))
+  const file = join(home, 'session-quickbar.json')
+  await writeFile(file, JSON.stringify({
+    version: 1,
+    messages: [{
+      id: 'm-abandon',
+      at: 1,
+      from: 'session-user',
+      to: 'session-abandon',
+      kind: 'message',
+      text: 'third time',
+      deliveredAt: 0,
+      attempts: 2,
+      lastAttemptAt: 1,
+      abandonedAt: 0,
+    }],
+  }))
+  const harness = createHarness(home)
+  apply(harness.ctx)
+  try {
+    const agent = {
+      id: 'session-abandon',
+      inject() { throw new Error('boom') },
+      followup() { throw new Error('boom') },
+    }
+    harness.listeners.get('agent/created')({ agent })
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    const saved = JSON.parse(await readFile(file, 'utf8'))
+    const row = saved.messages.find((message) => message.id === 'm-abandon')
+    assert.equal(row.attempts, 3)
+    assert.ok(row.abandonedAt > 0)
+
+    harness.listeners.get('agent/created')({ agent })
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    const after = JSON.parse(await readFile(file, 'utf8'))
+    assert.equal(after.messages.find((message) => message.id === 'm-abandon').attempts, 3)
+
+    const pending = await harness.tools[0].execute({ action: 'messages', with: 'session-abandon', state: 'pending' }, exec('session-user'))
+    assert.equal(pending.messages.length, 0)
+  } finally {
+    harness.dispose()
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test('pending messages survive a restart and are listed', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'session-quickbar-restart-'))
+  const first = createHarness(home)
+  apply(first.ctx)
+  try {
+    const result = await first.tools[0].execute({ action: 'notify', sessionId: 'session-later', text: '重启后送达' }, exec('session-user'))
+    assert.equal(result.delivered, false)
+    const pending = await first.tools[0].execute({ action: 'messages', with: 'session-later', state: 'pending' }, exec('session-user'))
+    assert.equal(pending.messages.length, 1)
+    assert.equal(pending.messages[0].pending, true)
+  } finally {
+    first.dispose()
+  }
+  const second = createHarness(home)
+  apply(second.ctx)
+  try {
+    const agent = createAgent('session-later')
+    second.listeners.get('agent/created')({ agent })
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    assert.equal(agent.injected.length, 1)
+    assert.ok(agent.injected[0].content[0].text.includes('重启后送达'))
+    const delivered = await second.tools[0].execute({ action: 'messages', with: 'session-later' }, exec('session-user'))
+    assert.equal(delivered.messages[0].delivered, true)
+  } finally {
+    second.dispose()
+    await rm(home, { recursive: true, force: true })
+  }
+})

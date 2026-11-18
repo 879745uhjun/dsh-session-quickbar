@@ -67,6 +67,12 @@ const MAX_LOG = 40
 const MAX_MESSAGES = 120
 /** Known-session cache size (ids and titles only). */
 const MAX_KNOWN_SESSIONS = 300
+/** Delivery attempts before a queued message is abandoned. */
+const MAX_DELIVERY_ATTEMPTS = 3
+/** Base backoff between delivery retries (doubles per attempt, capped). */
+const DELIVERY_BACKOFF_MS = 2_000
+/** How often the Host retries queued messages against live agents. */
+const DELIVERY_SWEEP_MS = 15_000
 /** Default page size of the messages action. */
 const DEFAULT_MESSAGE_LIMIT = 20
 
@@ -349,6 +355,9 @@ function normalizeMessage(value) {
     text,
     kind: value.kind === 'change' ? 'change' : 'message',
     deliveredAt: toTimestamp(value.deliveredAt),
+    attempts: Math.min(Math.max(Math.trunc(Number(value.attempts) || 0), 0), MAX_DELIVERY_ATTEMPTS),
+    lastAttemptAt: toTimestamp(value.lastAttemptAt),
+    abandonedAt: toTimestamp(value.abandonedAt),
   }
 }
 
@@ -773,6 +782,33 @@ function createStore(file, log) {
       if (entry === undefined || entry.deliveredAt !== 0) return
       entry.deliveredAt = Date.now()
       await persist()
+    },
+
+    /** Count one failed delivery attempt and abandon the message on the last one. */
+    async recordAttempt(id) {
+      await load()
+      const entry = doc.messages.find((message) => message.id === id)
+      if (entry === undefined || entry.deliveredAt !== 0) return
+      entry.attempts = Math.min(entry.attempts + 1, MAX_DELIVERY_ATTEMPTS)
+      entry.lastAttemptAt = Date.now()
+      if (entry.attempts >= MAX_DELIVERY_ATTEMPTS) entry.abandonedAt = Date.now()
+      await persist()
+    },
+
+    /** Undelivered, not-yet-abandoned messages for one Session, oldest first. */
+    pendingFor(sessionId) {
+      return snapshotDoc(doc).messages
+        .filter((message) => message.to === sessionId && message.deliveredAt === 0 && message.abandonedAt === 0)
+        .sort((left, right) => left.at - right.at)
+    },
+
+    /** Target ids that still hold an undelivered message. */
+    pendingTargets() {
+      const ids = new Set()
+      for (const message of snapshotDoc(doc).messages) {
+        if (message.deliveredAt === 0 && message.abandonedAt === 0) ids.add(message.to)
+      }
+      return [...ids]
     },
 
     /** Messages addressed to one Session, oldest first. */
@@ -1204,6 +1240,11 @@ function createTool({ store, log, deliver, agents, scanPlugins }) {
           type: 'integer',
           description: 'Maximum rows for "messages" and "sessions"; defaults to 20.',
         },
+        state: {
+          type: 'string',
+          enum: ['all', 'pending', 'delivered'],
+          description: 'Row filter for "messages"; defaults to "all".',
+        },
         with: {
           type: 'string',
           description: 'Only show messages exchanged with this Session id or title; used by "messages".',
@@ -1388,7 +1429,7 @@ function createTool({ store, log, deliver, agents, scanPlugins }) {
           kind: 'message',
         })
         if (message === null) return { ok: false, error: 'could not store the message' }
-        const delivered = deliver(message, args?.wake !== false)
+        const delivered = await deliver(message, args?.wake !== false)
         return {
           ok: true,
           action: 'notify',
@@ -1403,13 +1444,20 @@ function createTool({ store, log, deliver, agents, scanPlugins }) {
         const doc = store.snapshot()
         const limit = Math.min(Math.max(Number.isFinite(Number(args?.limit)) ? Math.trunc(Number(args.limit)) : DEFAULT_MESSAGE_LIMIT, 1), 50)
         let rows = doc.messages
+        const state = args?.state === 'pending' ? 'pending' : args?.state === 'delivered' ? 'delivered' : 'all'
+        if (state !== 'all') {
+          rows = rows.filter((message) => (state === 'pending'
+            ? message.deliveredAt === 0 && message.abandonedAt === 0
+            : message.deliveredAt !== 0))
+        }
         if (typeof args?.with === 'string' && args.with.trim() !== '') {
-          const resolved = store.resolveSession(args.with)
+          const raw = args.with.trim()
+          const resolved = store.resolveSession(raw)
           if (resolved !== null && typeof resolved === 'object') {
             return { ok: false, error: 'with matches several Sessions', candidates: resolved.ambiguous }
           }
-          const withId = resolved
-          rows = rows.filter((message) => (withId === null ? false : message.from === withId || message.to === withId))
+          const withId = resolved ?? raw
+          rows = rows.filter((message) => message.from === withId || message.to === withId)
         }
         return {
           ok: true,
@@ -1422,6 +1470,9 @@ function createTool({ store, log, deliver, agents, scanPlugins }) {
             to: message.to,
             kind: message.kind,
             delivered: message.deliveredAt !== 0,
+            pending: message.deliveredAt === 0 && message.abandonedAt === 0,
+            attempts: message.attempts,
+            abandonedAt: message.abandonedAt,
             text: message.text,
           })),
         }
@@ -1499,8 +1550,25 @@ export function apply(ctx) {
   const scanPlugins = createPluginScanner(log)
   const agents = new Map()
 
-  /** Deliver one queued message to a live agent; false when it is not loaded. */
-  function deliverTo(agent, message, wake) {
+  /** Resolve one live agent from the event map or the agent registry. */
+  function resolveAgent(sessionId) {
+    const known = agents.get(sessionId)
+    if (known !== undefined) return known
+    try {
+      const registry = ctx.get('agents')
+      const agent = registry !== undefined && typeof registry.get === 'function' ? registry.get(sessionId) : undefined
+      if (agent !== undefined && agent !== null && typeof agent === 'object') {
+        agents.set(sessionId, agent)
+        return agent
+      }
+    } catch (error) {
+      log('could not resolve a live agent for ' + sessionId, error)
+    }
+    return null
+  }
+
+  /** Deliver one message; a throwing inject counts as one failed attempt. */
+  async function deliverTo(agent, message, wake) {
     const prefix = '[会话快捷栏] '
     const reply = message.from === 'user' ? '' : '\n\n（回复请调用 session_quickbar action=notify，sessionId=' + message.from + '）'
     const text = message.kind === 'change'
@@ -1513,16 +1581,41 @@ export function apply(ctx) {
       else return false
     } catch (error) {
       log('could not deliver a message to ' + message.to, error)
+      await store.recordAttempt(message.id)
       return false
     }
-    void store.markDelivered(message.id)
+    await store.markDelivered(message.id)
     return true
   }
 
-  function deliver(message, wake) {
-    const agent = agents.get(message.to)
-    if (agent === undefined) return false
+  /** Deliver now when the target is live; otherwise leave it queued for the sweep. */
+  async function deliver(message, wake) {
+    const agent = resolveAgent(message.to)
+    if (agent === null) return false
     return deliverTo(agent, message, wake)
+  }
+
+  const flushing = new Set()
+  /** Attempt every eligible queued message for one Session, oldest first. */
+  async function flushPending(sessionId) {
+    if (flushing.has(sessionId)) return
+    flushing.add(sessionId)
+    try {
+      const agent = resolveAgent(sessionId)
+      if (agent === null) return
+      const now = Date.now()
+      const pending = store.pendingFor(sessionId).filter((message) => (
+        message.attempts < MAX_DELIVERY_ATTEMPTS
+        && (message.lastAttemptAt === 0
+          || now - message.lastAttemptAt >= Math.min(DELIVERY_BACKOFF_MS * 2 ** Math.max(0, message.attempts - 1), 30_000))
+      ))
+      const waker = [...pending].reverse().find((message) => message.kind !== 'change')
+      for (const message of pending) {
+        await deliverTo(agent, message, message === waker)
+      }
+    } finally {
+      flushing.delete(sessionId)
+    }
   }
 
   /** Inject one change notice into every watching Session and every affected owner. */
@@ -1568,7 +1661,7 @@ export function apply(ctx) {
         text: note,
         kind: 'change',
       }).then((message) => {
-        if (message !== null) deliver(message, false)
+        if (message !== null) void deliver(message, false)
       })
     }
   }
@@ -1596,14 +1689,32 @@ export function apply(ctx) {
   ctx.effect(() => ctx.on('agent/created', ({ agent }) => {
     if (agent === null || typeof agent !== 'object' || typeof agent.id !== 'string') return
     agents.set(agent.id, agent)
-    void store.load().then(() => {
-      const pending = store.inboxOf(agent.id, 20).filter((message) => message.deliveredAt === 0)
-      // Only the last explicit message wakes the fresh Session: it then sees every
-      // earlier message as injected context, and layout notices never wake anyone.
-      const waker = [...pending].reverse().find((message) => message.kind !== 'change')
-      for (const message of pending) deliverTo(agent, message, message === waker)
-    }, (error) => log('could not load queued messages', error))
+    void store.load().then(() => flushPending(agent.id), (error) => log('could not load queued messages', error))
   }), 'session-quickbar: agent channel')
+
+  // Agents that were already live before this plugin loaded never fire
+  // agent/created; seed them once so their queued messages can be retried.
+  try {
+    const registry = ctx.get('agents')
+    if (registry !== undefined && typeof registry.list === 'function') {
+      for (const agent of registry.list()) {
+        if (agent !== null && typeof agent === 'object' && typeof agent.id === 'string') agents.set(agent.id, agent)
+      }
+    }
+  } catch (error) {
+    log('could not seed live agents', error)
+  }
+
+  // A timer keeps retrying after a failure without waiting for the next load.
+  ctx.effect(() => {
+    const timer = setInterval(() => {
+      void store.load().then(() => {
+        for (const sessionId of store.pendingTargets()) void flushPending(sessionId)
+      }, () => {})
+    }, DELIVERY_SWEEP_MS)
+    timer.unref?.()
+    return () => clearInterval(timer)
+  }, 'session-quickbar: delivery sweep')
 
   ctx.effect(() => ctx.on('agent/disposed', ({ agent }) => {
     if (agent !== null && typeof agent === 'object' && typeof agent.id === 'string') agents.delete(agent.id)
