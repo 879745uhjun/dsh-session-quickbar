@@ -136,6 +136,7 @@ test('the strip, the menu entry, the page, the panel entry, and the dialog are r
     'shell.overlay',
     'shell.overlay',
     'sidebar.panellist.actions',
+    'plugins.detail.section',
   ])
   const strip = registrations[0].options
   assert.equal(strip.order, 40)
@@ -194,6 +195,14 @@ test('invalid registrations are refused without breaking the registry', () => {
   assert.equal(ids.includes('bad id'), false)
   assert.equal(ids.includes('no-handler'), false)
   assert.equal(ids.filter((id) => id === 'star').length, 1)
+})
+
+test('the plugin detail self-test registers with the spec metadata', () => {
+  const section = registrations.find((entry) => entry.options.name === 'plugins.detail.section')
+  assert.ok(section, 'the detail section is registered')
+  assert.equal(section.options.id, 'dsh-session-quickbar.selftest')
+  assert.equal(section.options.order, 90)
+  assert.equal(section.options.locale, 'session-quickbar')
 })
 
 test('the dictionaries cover the baseline locales', () => {

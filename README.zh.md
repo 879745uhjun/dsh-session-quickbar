@@ -61,6 +61,17 @@ const dispose = window.dshSessionQuickbar.register({
 
 完整契约（含宿主工具与“已有行按钮的插件如何迁移”）见 [CONTRACT.md](CONTRACT.md)。
 
+## 自检
+
+打开 **设置 → 插件**，选中本插件，详情页会出现「自检」区块。只有点击 **运行自检** 才会执行；每项 2 秒超时，单项失败不会影响其它项。
+
+- **宿主路由** —— `/session-quickbar` 返回 200 和完整布局文档；
+- **客户端登记表** —— `window.dshSessionQuickbar` 存在，`list()` 能返回动作列表；
+- **Agent 工具** —— `session_quickbar` 已注册（通过只读的 `/session-quickbar/selftest` 探测）；
+- **会话通道** —— 只读探测 `sessions` 能返回已知会话数，不发送任何消息。
+
+**复制结果** 会把同一份结果写成 Markdown 勾选清单，可直接粘贴到 issue 里。
+
 ## 限制
 
 - 只管这一排；其他行、行菜单、会话页头部不受影响。

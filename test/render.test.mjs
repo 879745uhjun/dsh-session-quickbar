@@ -408,3 +408,122 @@ test('token and box buttons render for a configured session', async () => {
   const token = buttons.find((item) => item.props['aria-label'] === 'bar.token')
   assert.equal(token.children.join(''), '1.2M')
 })
+
+
+/** Flat element list for one rendered tree. */
+function elementsOf(node) {
+  const out = []
+  const walk = (current) => {
+    if (current === null || current === undefined || typeof current === 'boolean') return
+    if (Array.isArray(current)) { current.forEach(walk); return }
+    if (typeof current.type === 'function') {
+      const props = { ...current.props }
+      if (current.children.length === 1) props.children = current.children[0]
+      return walk(invoke(current.type, props))
+    }
+    if (typeof current.type !== 'string') return
+    out.push({ tag: current.type, props: current.props, children: current.children })
+    current.children.forEach(walk)
+  }
+  walk(node)
+  return out
+}
+
+const selfTestSubject = { kind: 'bundle', pkg: { name: 'dsh-session-quickbar' } }
+
+function selfTestSection() {
+  return bySlot('plugins.detail.section').component
+}
+
+function selfTestButton(label) {
+  const root = selfTestSection()
+  const tree = root({ subject: selfTestSubject })
+  return elementsOf(tree).find((element) => element.tag === 'button' && element.children.some((child) => child === label))
+}
+
+test('the self-test renders only for this plugin and only after a click', () => {
+  const root = selfTestSection()
+  assert.equal(render(root({ subject: { kind: 'item', id: 'something-else' } })), '')
+  const idle = render(root({ subject: selfTestSubject }))
+  assert.ok(idle.includes('selftest.title'))
+  assert.ok(idle.includes('selftest.status.idle'))
+  assert.equal(idle.includes('selftest.status.pass'), false, 'nothing runs on mount')
+})
+
+test('the self-test passes every check and copies markdown', async () => {
+  const previousFetch = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    if (url === '/session-quickbar/selftest') {
+      return { ok: true, status: 200, json: async () => ({ ok: true, tool: { registered: true }, channel: { ok: true, sessions: 3 } }) }
+    }
+    return { ok: true, status: 200, json: async () => ({ ok: true, config }) }
+  }
+  const run = selfTestButton('selftest.run')
+  assert.ok(run, 'the run button renders')
+  run.props.onClick()
+  await wait(80)
+  const text = render(selfTestSection()({ subject: selfTestSubject }))
+  assert.equal((text.match(/selftest\.status\.pass/g) ?? []).length, 4)
+  assert.equal(text.includes('selftest.status.fail'), false)
+
+  const copied = []
+  const previousClipboard = navigator.clipboard
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (value) => { copied.push(value) } } })
+  try {
+    const copy = selfTestButton('selftest.copy')
+    assert.ok(copy, 'the copy button renders')
+    copy.props.onClick()
+    await wait(20)
+    assert.equal(copied.length, 1)
+    assert.ok(copied[0].startsWith('## selftest.title'))
+    assert.ok(copied[0].includes('selftest.markdown.pass'))
+  } finally {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: previousClipboard })
+    globalThis.fetch = previousFetch
+  }
+})
+
+test('one failed check leaves the others passing', async () => {
+  const previousFetch = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    if (url === '/session-quickbar') return { ok: false, status: 404, json: async () => ({}) }
+    if (url === '/session-quickbar/selftest') {
+      return { ok: true, status: 200, json: async () => ({ ok: true, tool: { registered: true }, channel: { ok: true, sessions: 0 } }) }
+    }
+    return { ok: true, status: 200, json: async () => ({ ok: true, config }) }
+  }
+  try {
+    const run = selfTestButton('selftest.run')
+    run.props.onClick()
+    await wait(80)
+    const text = render(selfTestSection()({ subject: selfTestSubject }))
+    assert.equal((text.match(/selftest\.status\.pass/g) ?? []).length, 3)
+    assert.equal((text.match(/selftest\.status\.fail/g) ?? []).length, 1)
+    assert.ok(text.includes('selftest.fail.http'))
+  } finally {
+    globalThis.fetch = previousFetch
+  }
+})
+
+test('a hanging check fails after the two-second ceiling', async () => {
+  const previousFetch = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    if (url === '/session-quickbar') return new Promise(() => {})
+    if (url === '/session-quickbar/selftest') {
+      return { ok: true, status: 200, json: async () => ({ ok: true, tool: { registered: true }, channel: { ok: true, sessions: 0 } }) }
+    }
+    return { ok: true, status: 200, json: async () => ({ ok: true, config }) }
+  }
+  try {
+    const started = Date.now()
+    const run = selfTestButton('selftest.run')
+    run.props.onClick()
+    await wait(2300)
+    assert.ok(Date.now() - started >= 2000)
+    const text = render(selfTestSection()({ subject: selfTestSubject }))
+    assert.ok(text.includes('selftest.fail.timeout'))
+    assert.equal((text.match(/selftest\.status\.pass/g) ?? []).length, 3)
+  } finally {
+    globalThis.fetch = previousFetch
+  }
+})

@@ -63,6 +63,17 @@ Call `dispose()` when your plugin unloads. `star`, `todo`, `archive`, `pin`, and
 
 The full contract, including the Host tool and the migration steps for a plugin that already draws its own row button, is in [CONTRACT.md](CONTRACT.md).
 
+## Self-test
+
+Open **Settings → Plugins**, pick this plugin, and its detail page shows a **自检 / Self-test** section. Nothing runs until you click **运行自检 / Run self-test**; each check is aborted after two seconds and one failure never hides the others.
+
+- **Host route** — `/session-quickbar` answers 200 with the layout document.
+- **Client registry** — `window.dshSessionQuickbar` exists and `list()` returns the action list.
+- **Agent tool** — `session_quickbar` is registered (probed through the read-only `/session-quickbar/selftest` route).
+- **Session channel** — the read-only `sessions` probe answers with its known-session count; no message is sent.
+
+**复制结果 / Copy result** writes the same list as Markdown checkboxes.
+
 ## Limitations
 
 - The strip only controls its own seat. Other rows, the row menu, and the conversation header are untouched.

@@ -39,6 +39,8 @@ window.__ModuleLoader__.load({
     const TOKEN_ENDPOINT = '/token-usage'
     const BOXES_ENDPOINT = '/session-boxes'
     const API_VERSION = 1
+    /** Per-check ceiling for the plugin detail self-test. */
+    const SELFTEST_TIMEOUT_MS = 2000
     const MAX_ITEMS = 24
     const MAX_CATALOG_ROWS = 200
     const COPIED_MS = 1200
@@ -149,6 +151,31 @@ window.__ModuleLoader__.load({
       'page.panelHide': 'Move this entry into More',
       'page.panelHidden': 'In More',
       'menu.panelOpen': 'Open {name}',
+      'selftest.title': 'Self-test',
+      'selftest.run': 'Run self-test',
+      'selftest.copy': 'Copy result',
+      'selftest.copied': 'Copied',
+      'selftest.summary': '{pass} passed · {fail} failed · {idle} not run',
+      'selftest.status.idle': 'Not run',
+      'selftest.status.running': 'Running',
+      'selftest.status.pass': 'Pass',
+      'selftest.status.fail': 'Fail',
+      'selftest.item.route': 'Host route /session-quickbar',
+      'selftest.item.registry': 'Client registry window.dshSessionQuickbar',
+      'selftest.item.tool': 'agent tool session_quickbar',
+      'selftest.item.channel': 'Session channel (read-only probe)',
+      'selftest.fail.timeout': 'No response within 2 seconds',
+      'selftest.fail.http': 'HTTP {status}',
+      'selftest.fail.error': 'Request failed: {message}',
+      'selftest.fail.body': 'Unexpected response shape',
+      'selftest.fail.registryMissing': 'window.dshSessionQuickbar is missing',
+      'selftest.fail.registryList': 'list() is missing or did not return an array',
+      'selftest.fail.tool': 'The tool is not registered',
+      'selftest.fail.channel': 'The channel probe failed',
+      'selftest.markdown.pass': '- [x] {label} — passed',
+      'selftest.markdown.fail': '- [ ] {label} — failed: {detail}',
+      'selftest.markdown.idle': '- [ ] {label} — not run',
+      'selftest.note': 'Runs only when the button is clicked; every check times out after two seconds and a failure never affects the other checks.',
       'bar.settings': 'Quick bar settings',
       'bar.pending': '{n} messages are queued until this session starts',
       'menu.label': 'Quick bar…',
@@ -261,6 +288,31 @@ window.__ModuleLoader__.load({
       'page.panelHide': '把这个入口收进「更多」',
       'page.panelHidden': '已在更多',
       'menu.panelOpen': '打开 {name}',
+      'selftest.title': '自检',
+      'selftest.run': '运行自检',
+      'selftest.copy': '复制结果',
+      'selftest.copied': '已复制',
+      'selftest.summary': '{pass} 通过 · {fail} 失败 · {idle} 未运行',
+      'selftest.status.idle': '未运行',
+      'selftest.status.running': '运行中',
+      'selftest.status.pass': '通过',
+      'selftest.status.fail': '失败',
+      'selftest.item.route': '宿主路由 /session-quickbar',
+      'selftest.item.registry': '客户端登记表 window.dshSessionQuickbar',
+      'selftest.item.tool': 'agent 工具 session_quickbar',
+      'selftest.item.channel': '会话通道（只读探测）',
+      'selftest.fail.timeout': '2 秒内没有响应',
+      'selftest.fail.http': 'HTTP {status}',
+      'selftest.fail.error': '请求失败：{message}',
+      'selftest.fail.body': '返回结构不符合预期',
+      'selftest.fail.registryMissing': 'window.dshSessionQuickbar 不存在',
+      'selftest.fail.registryList': 'list() 不可调用或未返回数组',
+      'selftest.fail.tool': '工具未注册',
+      'selftest.fail.channel': '通道探测失败',
+      'selftest.markdown.pass': '- [x] {label} — 通过',
+      'selftest.markdown.fail': '- [ ] {label} — 失败：{detail}',
+      'selftest.markdown.idle': '- [ ] {label} — 未运行',
+      'selftest.note': '只在点击「运行自检」时执行，每项 2 秒超时；失败不会影响其它项。',
       'bar.settings': '快捷栏设置',
       'bar.pending': '有 {n} 条消息排队，等这个会话启动后送达',
       'menu.label': '快捷栏设置…',
@@ -416,6 +468,22 @@ window.__ModuleLoader__.load({
       'font-size:13px;line-height:18px;text-align:left;border-radius:var(--dsw-radius-sm,6px);cursor:pointer}',
       '.sq-menu-item:hover{background:var(--dsw-alias-interactive-bg-hover)}',
       '.sq-menu-sep{height:.5px;margin:4px 8px;background:var(--dsw-alias-border-l2)}',
+      '.sq-selftest{display:flex;flex-direction:column;gap:10px;padding:14px 16px;',
+      'border:.5px solid var(--dsw-alias-border-l2);border-radius:12px;background:var(--dsw-alias-bg-layer-1)}',
+      '.sq-selftest-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}',
+      '.sq-selftest-title{margin:0;font-size:13px;line-height:20px;font-weight:600}',
+      '.sq-selftest-summary{margin-left:auto;font-size:11px;color:var(--dsw-alias-label-tertiary);',
+      'font-variant-numeric:tabular-nums}',
+      '.sq-selftest-list{display:flex;flex-direction:column;gap:6px}',
+      '.sq-selftest-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center}',
+      '.sq-selftest-label{font-size:12px;line-height:18px}',
+      '.sq-selftest-detail{grid-column:1 / -1;font-size:11px;line-height:16px;',
+      'color:var(--dsw-alias-label-tertiary);overflow-wrap:anywhere}',
+      '.sq-selftest-note{margin:0;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}',
+      '.sq-tag[data-state=pass]{color:var(--dsw-alias-state-success-primary)}',
+      '.sq-tag[data-state=fail]{color:var(--dsw-alias-state-error-primary)}',
+      '.sq-tag[data-state=running]{color:var(--dsw-alias-state-business-primary)}',
+      '.sq-tag[data-state=idle]{color:var(--dsw-alias-label-tertiary)}',
       '.sq-menu-item:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:-2px}',
       '.sq-menu-item .sq-row-label{display:block;flex:1;min-width:0}',
       '.sq-badge{flex:none;font-size:10px;line-height:16px;padding:0 6px;border-radius:999px;',
@@ -1580,6 +1648,192 @@ window.__ModuleLoader__.load({
       }, request.kind === 'token'
         ? h(TokenPanel, { sessionId: request.sessionId, ctx, token, t })
         : h(BoxPanel, { sessionId: request.sessionId, boxes, t }))
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Plugin detail self-test
+     * ------------------------------------------------------------------ */
+
+    /** Run one probe, aborting it after two seconds. */
+    async function runProbe(task) {
+      const controller = new AbortController()
+      let timer = 0
+      try {
+        return await Promise.race([
+          task(controller.signal).catch((error) => ({
+            ok: false,
+            detail: controller.signal.aborted ? 'timeout' : 'error:' + (error?.message ?? String(error)),
+          })),
+          new Promise((resolve) => {
+            timer = window.setTimeout(() => {
+              controller.abort()
+              resolve({ ok: false, detail: 'timeout' })
+            }, SELFTEST_TIMEOUT_MS)
+          }),
+        ])
+      } finally {
+        window.clearTimeout(timer)
+      }
+    }
+
+    /** GET one JSON route and let the caller judge the body. */
+    async function probeJson(url, signal, judge) {
+      const response = await fetch(url, {
+        signal,
+        cache: 'no-store',
+        headers: { accept: 'application/json' },
+      })
+      if (!response.ok) return { ok: false, detail: 'http:' + response.status }
+      const payload = await response.json().catch(() => null)
+      if (payload === null || typeof payload !== 'object' || payload.ok !== true) return { ok: false, detail: 'body' }
+      return judge(payload)
+    }
+
+    /** The four checks, in display order. */
+    function selfTestChecks(t) {
+      return [
+        {
+          id: 'route',
+          label: t('selftest.item.route'),
+          run: (signal) => probeJson('/session-quickbar', signal, () => ({ ok: true, detail: '' })),
+        },
+        {
+          id: 'registry',
+          label: t('selftest.item.registry'),
+          run: async () => {
+            const api = window.dshSessionQuickbar
+            if (api === undefined || api === null || typeof api !== 'object') return { ok: false, detail: 'missing' }
+            if (typeof api.list !== 'function') return { ok: false, detail: 'list' }
+            let actions
+            try {
+              actions = api.list()
+            } catch (error) {
+              return { ok: false, detail: 'list' }
+            }
+            if (!Array.isArray(actions)) return { ok: false, detail: 'list' }
+            return { ok: true, detail: String(actions.length) }
+          },
+        },
+        {
+          id: 'tool',
+          label: t('selftest.item.tool'),
+          run: (signal) => probeJson('/session-quickbar/selftest', signal, (payload) => (
+            payload.tool !== null && typeof payload.tool === 'object' && payload.tool.registered === true
+              ? { ok: true, detail: '' }
+              : { ok: false, detail: 'tool' }
+          )),
+        },
+        {
+          id: 'channel',
+          label: t('selftest.item.channel'),
+          run: (signal) => probeJson('/session-quickbar/selftest', signal, (payload) => (
+            payload.channel !== null && typeof payload.channel === 'object' && payload.channel.ok === true
+              ? { ok: true, detail: String(Number(payload.channel.sessions) || 0) }
+              : { ok: false, detail: 'channel' }
+          )),
+        },
+      ]
+    }
+
+    /** Human copy for one failure detail code. */
+    function selfTestDetail(t, detail) {
+      if (typeof detail !== 'string' || detail === '') return ''
+      if (detail === 'timeout') return t('selftest.fail.timeout')
+      if (detail.startsWith('http:')) return t('selftest.fail.http', { status: detail.slice(5) })
+      if (detail.startsWith('error:')) return t('selftest.fail.error', { message: detail.slice(6) })
+      if (detail === 'body') return t('selftest.fail.body')
+      if (detail === 'missing') return t('selftest.fail.registryMissing')
+      if (detail === 'list') return t('selftest.fail.registryList')
+      if (detail === 'tool') return t('selftest.fail.tool')
+      if (detail === 'channel') return t('selftest.fail.channel')
+      return detail
+    }
+
+    /** Markdown for the copy button. */
+    function selfTestMarkdown(t, checks, results) {
+      const lines = ['## ' + t('selftest.title'), '']
+      for (const check of checks) {
+        const result = results[check.id]
+        if (result === undefined) lines.push(t('selftest.markdown.idle', { label: check.label }))
+        else if (result.ok === true) lines.push(t('selftest.markdown.pass', { label: check.label }))
+        else lines.push(t('selftest.markdown.fail', { label: check.label, detail: selfTestDetail(t, result.detail) }))
+      }
+      return lines.join('\n')
+    }
+
+    /** One detail-page section, only for this plugin's subject. */
+    function SelfTestSection({ ctx, subject }) {
+      const pkg = subject !== null && subject !== undefined && typeof subject === 'object' ? subject.pkg : undefined
+      if (pkg === undefined || pkg === null || pkg.name !== 'dsh-session-quickbar') return null
+      return h(SelfTestBody, { ctx })
+    }
+
+    function SelfTestBody({ ctx }) {
+      const t = useT(ctx)
+      const [state, setState] = useState({ status: 'idle', results: {} })
+      const [copied, setCopied] = useState(false)
+      const timer = useRef(0)
+      useEffect(() => () => window.clearTimeout(timer.current), [])
+      const checks = selfTestChecks(t)
+      const pass = checks.filter((check) => state.results[check.id]?.ok === true).length
+      const fail = checks.filter((check) => state.results[check.id]?.ok === false).length
+      const idle = checks.length - pass - fail
+
+      const run = async () => {
+        if (state.status === 'running') return
+        const results = {}
+        for (const check of checks) results[check.id] = 'running'
+        setState({ status: 'running', results: { ...results } })
+        await Promise.all(checks.map(async (check) => {
+          const outcome = await runProbe((signal) => check.run(signal))
+          results[check.id] = outcome
+          setState({ status: 'running', results: { ...results } })
+        }))
+        setState({ status: 'done', results: { ...results } })
+      }
+
+      const copy = async () => {
+        const text = selfTestMarkdown(t, checks, state.results)
+        try {
+          await navigator.clipboard.writeText(text)
+          setCopied(true)
+          window.clearTimeout(timer.current)
+          timer.current = window.setTimeout(() => setCopied(false), 1600)
+        } catch (error) {
+          console.warn('[session-quickbar] could not copy the self-test result:', error)
+        }
+      }
+
+      return h('section', { className: 'sq-selftest' },
+        h('div', { className: 'sq-selftest-head' },
+          h('h3', { className: 'sq-selftest-title' }, t('selftest.title')),
+          h('button', {
+            type: 'button',
+            className: 'sq-btn-ghost',
+            disabled: state.status === 'running',
+            onClick: () => { void run() },
+          }, t('selftest.run')),
+          h('button', {
+            type: 'button',
+            className: 'sq-btn-ghost',
+            disabled: state.status === 'idle',
+            onClick: () => { void copy() },
+          }, copied ? t('selftest.copied') : t('selftest.copy')),
+          h('span', { className: 'sq-selftest-summary' },
+            t('selftest.summary', { pass, fail, idle }))),
+        h('div', { className: 'sq-selftest-list' }, checks.map((check) => {
+          const result = state.results[check.id]
+          const status = result === 'running'
+            ? 'running'
+            : result === undefined ? 'idle' : result.ok === true ? 'pass' : 'fail'
+          return h('div', { key: check.id, className: 'sq-selftest-row', 'data-state': status },
+            h('span', { className: 'sq-selftest-label' }, check.label),
+            h('span', { className: 'sq-tag', 'data-state': status }, t('selftest.status.' + status)),
+            status === 'fail'
+              ? h('span', { className: 'sq-selftest-detail' }, selfTestDetail(t, result.detail))
+              : null)
+        })),
+        h('p', { className: 'sq-selftest-note' }, t('selftest.note')))
     }
 
     /* ------------------------------------------------------------------ *
@@ -2911,13 +3165,22 @@ window.__ModuleLoader__.load({
           order: 61,
           locale: NS,
         }, Popover))
+
         const HiddenPanels = (props) => h(HiddenPanelsMenu, { ...props, deps, ctx })
+        const SelfTest = (props) => h(SelfTestSection, { ...props, ctx })
         ctx.slots.inject('sidebar.panellist.actions', () => ctx.slots.register({
           name: 'sidebar.panellist.actions',
           id: 'session-quickbar-hidden-panels',
           order: 1,
           locale: NS,
         }, HiddenPanels))
+
+        ctx.slots.inject('plugins.detail.section', () => ctx.slots.register({
+          name: 'plugins.detail.section',
+          id: 'dsh-session-quickbar.selftest',
+          order: 90,
+          locale: NS,
+        }, SelfTest))
 
       },
     }

@@ -41,6 +41,8 @@ const ROUTE = '/session-quickbar'
 const EVENTS_ROUTE = '/session-quickbar/events'
 /** Installed profile bundles that could contribute a button. */
 const PLUGINS_ROUTE = '/session-quickbar/plugins'
+/** Read-only self-test probe for the plugin detail page. */
+const SELFTEST_ROUTE = '/session-quickbar/selftest'
 /** SSE heartbeat interval; keeps idle proxies and sockets alive. */
 const SSE_HEARTBEAT_MS = 20_000
 /** Layout file format version. */
@@ -942,6 +944,39 @@ function createPluginsRoute(scan, log) {
   }
 }
 
+/** Read-only probe for the plugin detail page: tool registration and channel state. */
+function createSelfTestRoute({ store, isToolRegistered, log }) {
+  return async function handleSessionQuickbarSelfTest(request, response) {
+    if (request.method !== 'GET') {
+      response.writeHead(405, { allow: 'GET', 'content-type': 'application/json; charset=utf-8' })
+      response.end(JSON.stringify({ ok: false, error: 'method not allowed' }))
+      return
+    }
+    if (!isAcceptableOrigin(request)) {
+      sendJson(response, 403, { ok: false, error: 'cross-origin request refused' })
+      return
+    }
+    try {
+      await store.load()
+      const doc = store.snapshot()
+      sendJson(response, 200, {
+        ok: true,
+        generatedAt: Date.now(),
+        tool: { registered: isToolRegistered() === true, name: 'session_quickbar' },
+        channel: {
+          ok: true,
+          sessions: Object.keys(doc.knownSessions).length,
+          subscriptions: Object.keys(doc.subscriptions).length,
+          messages: doc.messages.length,
+        },
+      })
+    } catch (error) {
+      log('self-test probe failed', error)
+      sendJson(response, 500, { ok: false, error: 'self-test probe failed' })
+    }
+  }
+}
+
 /** The browser-facing JSON route: GET the document, POST one mutation. */
 function createRouteHandler(store, log, onMutation) {
   return async function handleSessionQuickbar(request, response) {
@@ -1546,7 +1581,15 @@ export function apply(ctx) {
     notifyChange({ ...change, doc: store.snapshot() })
   }), 'session-quickbar: change notices')
 
-  ctx.effect(() => ctx.tools.register(createTool({ store, log, deliver, agents, scanPlugins })), 'session-quickbar: agent tool')
+  let toolRegistered = false
+  ctx.effect(() => {
+    const dispose = ctx.tools.register(createTool({ store, log, deliver, agents, scanPlugins }))
+    toolRegistered = true
+    return () => {
+      toolRegistered = false
+      if (typeof dispose === 'function') dispose()
+    }
+  }, 'session-quickbar: agent tool')
 
   // Remember every live agent so a channel message can reach it, and flush the
   // messages that were queued while it was not loaded.
@@ -1605,7 +1648,13 @@ export function apply(ctx) {
       const removeConfig = scope.webServer.register({ kind: 'exact', path: ROUTE, handler: createRouteHandler(store, log, onMutation) })
       const removeEvents = scope.webServer.register({ kind: 'exact', path: EVENTS_ROUTE, handler: events.attach })
       const removePlugins = scope.webServer.register({ kind: 'exact', path: PLUGINS_ROUTE, handler: createPluginsRoute(scanPlugins, log) })
+      const removeSelfTest = scope.webServer.register({
+        kind: 'exact',
+        path: SELFTEST_ROUTE,
+        handler: createSelfTestRoute({ store, isToolRegistered: () => toolRegistered, log }),
+      })
       return () => {
+        removeSelfTest()
         removePlugins()
         removeEvents()
         removeConfig()
