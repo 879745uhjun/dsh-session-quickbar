@@ -1984,10 +1984,21 @@ window.__ModuleLoader__.load({
       return lines.join('\n')
     }
 
+    /** The plugin name a detail-page subject points at, in either form. */
+    function subjectPluginName(subject) {
+      if (subject === null || typeof subject !== 'object') return undefined
+      if (subject.kind === 'bundle') return subject.pkg?.name
+      if (subject.kind === 'item' && typeof subject.id === 'string') {
+        return subject.id === 'dsh-session-quickbar' || subject.id === 'include:dsh-session-quickbar'
+          ? 'dsh-session-quickbar'
+          : undefined
+      }
+      return undefined
+    }
+
     /** One detail-page section, only for this plugin's subject. */
     function SelfTestSection({ ctx, subject }) {
-      const pkg = subject !== null && subject !== undefined && typeof subject === 'object' ? subject.pkg : undefined
-      if (pkg === undefined || pkg === null || pkg.name !== 'dsh-session-quickbar') return null
+      if (subjectPluginName(subject) !== 'dsh-session-quickbar') return null
       return h(SelfTestBody, { ctx })
     }
 

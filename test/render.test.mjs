@@ -450,6 +450,14 @@ test('the self-test renders only for this plugin and only after a click', () => 
   assert.equal(idle.includes('selftest.status.pass'), false, 'nothing runs on mount')
 })
 
+test('an item subject includes this package and excludes others', () => {
+  const root = selfTestSection()
+  const included = render(root({ subject: { kind: 'item', id: 'include:dsh-session-quickbar' } }))
+  assert.ok(included.includes('selftest.title'))
+  assert.ok(render(root({ subject: { kind: 'item', id: 'dsh-session-quickbar' } })).includes('selftest.title'))
+  assert.equal(render(root({ subject: { kind: 'item', id: 'include:dsh-session-todos' } })), '')
+})
+
 test('the self-test passes every check and copies markdown', async () => {
   const previousFetch = globalThis.fetch
   globalThis.fetch = async (url) => {
