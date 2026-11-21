@@ -15,6 +15,15 @@
 - **处处实时。** 布局变更通过 Server-Sent Events 推送到每个打开的窗口，不用刷新。
 - **面向插件制作会话的双向通道。** `session_quickbar`（宿主工具）让任何会话读写布局、登记自己正在做的按钮、订阅变更、给别的会话发消息。每次布局变更都会以一条短消息注入订阅的会话；登记归属的会话还会收到“你的按钮现在在第几位/被隐藏”。对方用 `notify` 回信，于是快捷栏和维护它的会话可以双向沟通。
 
+## 数据来源
+
+会话元数据按以下顺序读取：
+
+1. **dsh-session-hub** —— 一次 `GET /session-meta`（带 `If-None-Match`，未变化时返回 `304`），加一条 `window.dshSessionEvents`（version 1）订阅。收到事件后只重新校验一次聚合，并只通知发生变化那个会话的 store。
+2. **回退** —— 原来的四条路由（`/session-stars`、`/session-todos`、`/session-boxes`、`/session-notify`）和三条 SSE。触发条件：`/session-meta` 返回 404/超时、结构不符，或事件总线缺失/不是 version 1。
+
+两条路径渲染同一个快捷栏，没有切换开关。只有打开盒子菜单时才会向 session-boxes 路由请求盒子定义。
+
 ## 在哪里
 
 ```

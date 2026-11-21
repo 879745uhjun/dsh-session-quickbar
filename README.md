@@ -15,6 +15,15 @@ One configurable quick-action strip on the right of every Session row in the Dee
 - **Live everywhere.** Layout changes are pushed over Server-Sent Events, so every open window re-renders without a reload.
 - **A channel for plugin-authoring Sessions.** `session_quickbar` (Host tool) lets any Session read or change a layout, register the button it is building, subscribe to changes, and message another Session. Every layout change is injected into subscribed Sessions as one short message, and registered owners hear where their button landed. Those Sessions answer with `notify`, so the bar and the Sessions that maintain it can talk both ways.
 
+## Data sources
+
+Session metadata is read in this order:
+
+1. **dsh-session-hub** — one `GET /session-meta` (with `If-None-Match`, so an unchanged read is a `304`) plus one subscription to `window.dshSessionEvents` (version 1). A bus event revalidates the aggregate once and notifies only the stores of the session that changed.
+2. **Fallback** — the original four routes (`/session-stars`, `/session-todos`, `/session-boxes`, `/session-notify`) and their three SSE streams. It runs when `/session-meta` answers 404/timeout, its payload has an unexpected shape, or the event bus is missing or not version 1.
+
+Both paths render the same bar; there is no setting to choose between them. The box menu asks the session-boxes route for its box definitions only when you open it.
+
 ## Where it lives
 
 ```

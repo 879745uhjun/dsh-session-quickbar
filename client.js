@@ -1454,6 +1454,228 @@ window.__ModuleLoader__.load({
       }
     }
 
+    /* ------------------------------------------------------------------ *
+     * Read-only aggregation through dsh-session-hub, with the four adapter
+     * routes kept as a fallback when the hub is absent or failing.
+     * ------------------------------------------------------------------ */
+
+    /** One session's aggregated metadata from GET /session-meta. */
+    function createHubStore() {
+      let state = { mode: 'probing', etag: null, sessions: {}, sources: null, error: null, loaded: false }
+      const listeners = new Set()
+      const sessionListeners = new Map()
+      const sessionVersions = new Map()
+      const modeStore = createStore('probing')
+      const sourceStore = createStore(0)
+      let sourceVersion = 0
+      let globalVersion = 0
+      let inflight = null
+
+      function notifySession(sessionId) {
+        sessionVersions.set(sessionId, (sessionVersions.get(sessionId) ?? 0) + 1)
+        for (const listener of [...(sessionListeners.get(sessionId) ?? [])]) listener()
+      }
+
+      function publish(next, changed) {
+        const previousMode = state.mode
+        const previousSources = JSON.stringify(state.sources)
+        state = { ...state, ...next }
+        globalVersion += 1
+        if (state.mode !== previousMode) modeStore.set(state.mode)
+        if (JSON.stringify(state.sources) !== previousSources) {
+          sourceVersion += 1
+          sourceStore.set(sourceVersion)
+        }
+        for (const listener of [...listeners]) listener()
+        for (const sessionId of changed ?? []) notifySession(sessionId)
+      }
+
+      /** Ids whose entry appeared, changed, or disappeared. */
+      function changedIds(before, after) {
+        const ids = []
+        for (const sessionId of Object.keys(after)) if (before[sessionId] !== after[sessionId]) ids.push(sessionId)
+        for (const sessionId of Object.keys(before)) if (after[sessionId] === undefined) ids.push(sessionId)
+        return ids
+      }
+
+      /** Read /session-meta once; a 304 keeps the current document. */
+      function load() {
+        if (inflight !== null) return inflight
+        inflight = (async () => {
+          try {
+            const headers = { accept: 'application/json' }
+            if (state.etag !== null) headers['if-none-match'] = state.etag
+            const response = await fetch('/session-meta', { headers, cache: 'no-store' })
+            if (response.status === 304 && state.loaded) {
+              publish({ mode: 'hub', error: null }, [])
+              return state
+            }
+            if (!response.ok) throw new Error('HTTP ' + response.status)
+            const payload = await response.json()
+            if (payload?.ok !== true || payload.sessions === null || typeof payload.sessions !== 'object' || Array.isArray(payload.sessions)) {
+              throw new Error('unexpected /session-meta response')
+            }
+            const changed = state.loaded ? changedIds(state.sessions, payload.sessions) : Object.keys(payload.sessions)
+            const etag = response.headers.get('etag')
+            publish({
+              mode: 'hub',
+              etag: typeof etag === 'string' && etag !== '' ? etag : null,
+              sessions: payload.sessions,
+              sources: payload.sources ?? null,
+              loaded: true,
+              error: null,
+            }, changed)
+            return state
+          } catch (error) {
+            console.warn('[session-quickbar] the session hub is unavailable; falling back to the adapter routes:', error)
+            publish({ mode: 'legacy', error, sessions: {}, sources: null, loaded: false }, [])
+            return state
+          } finally {
+            inflight = null
+          }
+        })()
+        return inflight
+      }
+
+      return {
+        getSnapshot: () => state,
+        subscribe(listener) {
+          listeners.add(listener)
+          return () => { listeners.delete(listener) }
+        },
+        subscribeSession(sessionId, listener) {
+          if (!sessionListeners.has(sessionId)) sessionListeners.set(sessionId, new Set())
+          sessionListeners.get(sessionId).add(listener)
+          return () => { sessionListeners.get(sessionId)?.delete(listener) }
+        },
+        sessionVersion: (sessionId) => sessionVersions.get(sessionId) ?? 0,
+        globalVersion: () => globalVersion,
+        sourceVersion: () => sourceVersion,
+        sourceStore,
+        modeStore,
+        load,
+        row: (sessionId) => state.sessions[sessionId],
+        available(kind) {
+          if (state.mode !== 'hub') return false
+          const source = state.sources?.[kind]
+          if (source === undefined || source === null) return false
+          return source.state !== 'invalid' && source.state !== 'missing'
+        },
+        markLegacy(error) {
+          if (state.mode === 'legacy') return
+          publish({ mode: 'legacy', sessions: {}, sources: null, error: error ?? state.error }, [])
+        },
+      }
+    }
+
+    /**
+     * Store-shaped, per-session views over the hub. Each view notifies only
+     * its own session (plus the rare source-availability change), so one row
+     * changing never re-renders the other rows.
+     */
+    function createHubViews(hub, legacy) {
+      const cache = new Map()
+
+      function build(kind, sessionId) {
+        const row = hub.row(sessionId) ?? {}
+        if (kind === 'ratings') {
+          return {
+            status: 'ready',
+            available: hub.available('stars'),
+            ratings: row.stars === undefined ? {} : { [sessionId]: { stars: row.stars } },
+          }
+        }
+        if (kind === 'todos') {
+          return {
+            status: 'ready',
+            available: hub.available('todos'),
+            todos: row.todo === undefined ? {} : { [sessionId]: row.todo },
+          }
+        }
+        if (kind === 'watching') {
+          return {
+            status: 'ready',
+            available: hub.available('notify'),
+            watched: row.watching === true ? { [sessionId]: {} } : {},
+          }
+        }
+        return {
+          status: 'ready',
+          available: hub.available('boxes'),
+          boxes: legacy.boxes.getSnapshot().boxes,
+          memberships: row.boxes === undefined ? {} : { [sessionId]: row.boxes },
+        }
+      }
+
+      function view(kind, sessionId) {
+        const key = kind + ':' + sessionId
+        if (cache.has(key)) return cache.get(key)
+        let snapshot = build(kind, sessionId)
+        let stamp = -1
+        let boxesRef = null
+        const store = {
+          getSnapshot() {
+            const next = hub.sessionVersion(sessionId) * 1_000_003 + hub.sourceVersion()
+            const definitions = kind === 'boxes' ? legacy.boxes.getSnapshot() : null
+            if (next !== stamp || definitions !== boxesRef) {
+              stamp = next
+              boxesRef = definitions
+              snapshot = build(kind, sessionId)
+            }
+            return snapshot
+          },
+          subscribe(listener) {
+            const offSession = hub.subscribeSession(sessionId, listener)
+            const offSources = hub.sourceStore.subscribe(listener)
+            const offBoxes = kind === 'boxes' ? legacy.boxes.subscribe(listener) : () => {}
+            return () => {
+              offSession()
+              offSources()
+              offBoxes()
+            }
+          },
+        }
+        if (kind === 'ratings') {
+          store.setRating = async (id, stars) => {
+            const result = await legacy.ratings.setRating(id, stars)
+            await hub.load()
+            return result
+          }
+        } else if (kind === 'todos') {
+          store.setDone = async (id, done, title) => {
+            const result = await legacy.todos.setDone(id, done, title)
+            await hub.load()
+            return result
+          }
+        } else if (kind === 'watching') {
+          store.toggle = async (id, title) => {
+            const result = await legacy.notify.toggle(id, title)
+            await hub.load()
+            return result
+          }
+        } else {
+          store.ensure = () => (legacy.boxes.getSnapshot().status === 'ready'
+            ? Promise.resolve()
+            : legacy.boxes.refresh())
+          store.refresh = () => legacy.boxes.refresh()
+          store.assign = async (id, ids) => {
+            const result = await legacy.boxes.assign(id, ids)
+            await hub.load()
+            return result
+          }
+        }
+        cache.set(key, store)
+        return store
+      }
+
+      return {
+        ratings: (sessionId) => view('ratings', sessionId),
+        todos: (sessionId) => view('todos', sessionId),
+        notify: (sessionId) => view('watching', sessionId),
+        boxes: (sessionId) => view('boxes', sessionId),
+      }
+    }
+
     /** Boxes in display order, children right after their parent. */
     function flattenBoxes(boxes) {
       const rows = []
@@ -1527,6 +1749,7 @@ window.__ModuleLoader__.load({
         onClick: (event) => {
           event.preventDefault()
           event.stopPropagation()
+          if (typeof boxes.ensure === 'function') void boxes.ensure()
           openPopover(popover, 'boxes', sessionId, event)
         },
         onPointerDown: (event) => event.stopPropagation(),
@@ -2238,18 +2461,24 @@ window.__ModuleLoader__.load({
     }
 
     function QuickBar({ ctx, sessionId, deps }) {
-      const { configStore, registry, ratings, todos, notify, token, boxes, popover, confirm, panelIntent } = deps
+      const { configStore, registry, ratings, todos, notify, token, boxes, hub, views, popover, confirm, panelIntent } = deps
       const state = useStore(configStore)
       const revision = useStore(registryStoreVersion(registry))
-      useStore(ratings)
-      useStore(todos)
-      useStore(notify)
+      const hubMode = useStore(hub.modeStore) === 'hub'
+      useStore(hub.sourceStore)
+      const ratingsStore = hubMode ? views.ratings(sessionId) : ratings
+      const todosStore = hubMode ? views.todos(sessionId) : todos
+      const notifyStore = hubMode ? views.notify(sessionId) : notify
+      const boxesStore = hubMode ? views.boxes(sessionId) : boxes
+      useStore(ratingsStore)
+      useStore(todosStore)
+      useStore(notifyStore)
       useStore(token)
-      useStore(boxes)
+      useStore(boxesStore)
       const t = useT(ctx)
       const language = languageOf()
       if (state.config === null) return null
-      const entries = resolveEntries({ config: state.config, sessionId, registry, ratings: ratings.getSnapshot(), todos: todos.getSnapshot(), notify: notify.getSnapshot(), token: token.getSnapshot(), boxes: boxes.getSnapshot(), language })
+      const entries = resolveEntries({ config: state.config, sessionId, registry, ratings: ratingsStore.getSnapshot(), todos: todosStore.getSnapshot(), notify: notifyStore.getSnapshot(), token: token.getSnapshot(), boxes: boxesStore.getSnapshot(), language })
       const pendingCount = state.config.messages.filter((message) => message.to === sessionId && message.deliveredAt === 0 && (message.abandonedAt ?? 0) === 0).length
       if (entries.length === 0 && pendingCount === 0) return null
       const takeover = state.config.global.takeover !== false
@@ -2262,14 +2491,14 @@ window.__ModuleLoader__.load({
       }, entries.map((entry) => {
         const key = entry.id
         const id = entry.id
-        if (id === 'star') return h(StarButton, { key, ctx, sessionId, ratings, t })
-        if (id === 'todo') return h(TodoButton, { key, ctx, sessionId, todos, t })
+        if (id === 'star') return h(StarButton, { key, ctx, sessionId, ratings: ratingsStore, t })
+        if (id === 'todo') return h(TodoButton, { key, ctx, sessionId, todos: todosStore, t })
         if (id === 'pin') return h(PinButton, { key, ctx, sessionId, workspaces: deps.workspaces, t })
         if (id === 'archive') return h(ArchiveButton, { key, ctx, sessionId, workspaces: deps.workspaces, confirm, t })
-        if (id === 'notify') return h(NotifyButton, { key, ctx, sessionId, notify: deps.notify, t })
+        if (id === 'notify') return h(NotifyButton, { key, ctx, sessionId, notify: notifyStore, t })
         if (id === 'pack') return h(PackButton, { key, ctx, sessionId, t })
         if (id === 'token') return h(TokenButton, { key, ctx, sessionId, token, popover, t })
-        if (id === 'boxes') return h(BoxButton, { key, ctx, sessionId, boxes, popover, t })
+        if (id === 'boxes') return h(BoxButton, { key, ctx, sessionId, boxes: boxesStore, popover, t })
         if (id === 'copy-id') return h(CopyIdButton, { key, sessionId, t })
         return h(RegistryButton, { key, descriptor: entry.descriptor, sessionId, ctx })
       }), pendingCount > 0
@@ -2960,6 +3189,8 @@ window.__ModuleLoader__.load({
         const notify = createNotifyStore()
         const token = createTokenStore()
         const boxes = createBoxesStore()
+        const hub = createHubStore()
+        const views = createHubViews(hub, { ratings, todos, notify, boxes })
         const popover = createStore(null)
         const registry = createRegistry()
         registry.versionStore = createStore(0)
@@ -2967,7 +3198,7 @@ window.__ModuleLoader__.load({
         const confirm = createStore(null)
         const panelIntent = createStore(null)
         const workspaces = readService(ctx, 'workspaces')
-        const deps = { configStore, registry, ratings, todos, notify, token, boxes, popover, confirm, panelIntent, workspaces }
+        const deps = { configStore, registry, ratings, todos, notify, token, boxes, hub, views, popover, confirm, panelIntent, workspaces }
 
         ctx.effect(() => {
           const style = document.createElement('style')
@@ -3021,32 +3252,9 @@ window.__ModuleLoader__.load({
           }
         }, 'session-quickbar: hidden panel rows')
 
-        ctx.effect(() => {
-          const refresh = () => {
-            if (document.visibilityState === 'hidden') return
-            void configStore.refresh()
-            void ratings.refresh()
-            void todos.refresh()
-            void notify.refresh()
-          void token.refresh()
-          void boxes.refresh()
-            void token.refresh()
-            void boxes.refresh()
-          }
-          window.addEventListener('focus', refresh)
-          document.addEventListener('visibilitychange', refresh)
-          void configStore.refresh()
-          void ratings.refresh()
-          void todos.refresh()
-          void notify.refresh()
-          void token.refresh()
-          void boxes.refresh()
-          return () => {
-            window.removeEventListener('focus', refresh)
-            document.removeEventListener('visibilitychange', refresh)
-          }
-        }, 'session-quickbar: layout sync')
-
+        // Live sync: our own layout stream is always on; the three adapter
+        // streams exist only on the fallback path.
+        let openLegacyStreams = () => {}
         ctx.effect(() => {
           if (typeof EventSource !== 'function') return undefined
           const sources = []
@@ -3057,7 +3265,7 @@ window.__ModuleLoader__.load({
                 const data = JSON.parse(payload.data)
                 if (data?.ok === true) apply(data)
               } catch {
-                /* a malformed push is ignored; the next one or a focus refresh repairs it */
+                /* a malformed push is ignored; the next one or a refresh repairs it */
               }
             }
             const onError = () => {}
@@ -3066,10 +3274,16 @@ window.__ModuleLoader__.load({
             sources.push({ source, event, handler, onError })
           }
           listen(EVENTS, 'config', (data) => configStore.applyServer(data.config))
-          listen(STARS_EVENTS, 'ratings', (data) => ratings.applyServer(data.ratings))
-          listen(TODOS_EVENTS, 'todos', (data) => todos.applyServer(data.todos))
-          listen(NOTIFY_EVENTS, 'watched', (data) => notify.applyServer(data.watched))
+          let opened = false
+          openLegacyStreams = () => {
+            if (opened) return
+            opened = true
+            listen(STARS_EVENTS, 'ratings', (data) => ratings.applyServer(data.ratings))
+            listen(TODOS_EVENTS, 'todos', (data) => todos.applyServer(data.todos))
+            listen(NOTIFY_EVENTS, 'watched', (data) => notify.applyServer(data.watched))
+          }
           return () => {
+            openLegacyStreams = () => {}
             for (const entry of sources) {
               entry.source.removeEventListener(entry.event, entry.handler)
               entry.source.removeEventListener('error', entry.onError)
@@ -3077,6 +3291,67 @@ window.__ModuleLoader__.load({
             }
           }
         }, 'session-quickbar: live sync')
+
+        // Data source: prefer the hub (one ETag fetch plus its event bus), fall
+        // back to the four adapter routes and their streams.
+        ctx.effect(() => {
+          const bus = window.dshSessionEvents
+          const usable = bus !== undefined && bus !== null && bus.version === 1 && typeof bus.on === 'function'
+          let offBus
+          let legacyMode = false
+          const refreshLegacy = () => {
+            void ratings.refresh()
+            void todos.refresh()
+            void notify.refresh()
+            void boxes.refresh()
+          }
+          const enterLegacy = () => {
+            if (legacyMode) return
+            legacyMode = true
+            hub.markLegacy()
+            refreshLegacy()
+            openLegacyStreams()
+          }
+          if (usable) {
+            offBus = bus.on((event) => {
+              if (event === null || typeof event !== 'object') return
+              if (event.source !== 'stars' && event.source !== 'todos' && event.source !== 'notify') return
+              void hub.load()
+            })
+          }
+          const refresh = () => {
+            if (document.visibilityState === 'hidden') return
+            void configStore.refresh()
+            void token.refresh()
+            if (hub.getSnapshot().mode === 'hub') {
+              void hub.load()
+              return
+            }
+            refreshLegacy()
+          }
+          window.addEventListener('focus', refresh)
+          document.addEventListener('visibilitychange', refresh)
+          if (usable) {
+            void hub.load().then((snapshot) => {
+              if (snapshot.mode !== 'hub') enterLegacy()
+            })
+          } else {
+            enterLegacy()
+          }
+          void configStore.refresh()
+          void token.refresh()
+          return () => {
+            if (typeof offBus === 'function') offBus()
+            window.removeEventListener('focus', refresh)
+            document.removeEventListener('visibilitychange', refresh)
+          }
+        }, 'session-quickbar: data source')
+
+        // Box edits go through the session-boxes plugin; refresh the aggregate
+        // after them so the row icon and the box panel agree.
+        ctx.effect(() => boxes.subscribe(() => {
+          if (hub.getSnapshot().mode === 'hub') void hub.load()
+        }), 'session-quickbar: boxes to hub')
 
         // The public contract for other client plugins.
         ctx.effect(() => {
